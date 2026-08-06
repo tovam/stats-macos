@@ -20,18 +20,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build application
-        run: >-
-          xcodebuild
-          -scheme Stats
-          -destination 'platform=macOS'
-          -configuration Release
-          -archivePath build/Stats.xcarchive
-          archive
-          CODE_SIGNING_ALLOWED=NO
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme Stats \
+            -destination 'platform=macOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            build \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log
+      - name: Report build errors
+        if: failure()
+        shell: bash
+        run: |
+          grep -E 'error:|BUILD FAILED' xcodebuild.log | head -50 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xcode-build-log
+          path: xcodebuild.log
+          if-no-files-found: error
       - name: Package application
         run: >-
           ditto -c -k --keepParent
-          build/Stats.xcarchive/Products/Applications/Stats.app
+          build/Build/Products/Release/Stats.app
           build/Stats.app.zip
       - name: Upload application
         uses: actions/upload-artifact@v4
