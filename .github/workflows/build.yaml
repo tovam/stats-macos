@@ -14,6 +14,12 @@ on:
         type: boolean
         default: false
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish Stats.app.zip as a public GitHub Release
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - master
@@ -28,6 +34,8 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v7
@@ -71,11 +79,11 @@ jobs:
           path: build/Stats.app.zip
           if-no-files-found: error
       - name: Publish public release
-        if: ${{ inputs.publish_release }}
+        if: ${{ inputs.publish_release || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')) }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ inputs.ref }}
+          RELEASE_SHA: ${{ inputs.ref != '' && inputs.ref || github.sha }}
         run: |
           set -euo pipefail
           release_date="$(date -u +%Y-%m-%d)"
