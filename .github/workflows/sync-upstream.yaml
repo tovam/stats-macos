@@ -1,0 +1,57 @@
+name: weekly upstream sync
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+      timezone: Europe/Podgorica
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.result.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Merge upstream master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags https://github.com/exelban/stats.git master
+
+          if ! git merge --no-edit FETCH_HEAD; then
+            echo "::error title=Upstream merge conflict::Resolve the conflicts on master, then run this workflow again."
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+      - name: Push merged master
+        run: git push origin HEAD:master
+
+      - name: Select revision to build
+        id: result
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-and-release:
+    needs: sync
+    uses: ./.github/workflows/build.yaml
+    with:
+      ref: ${{ needs.sync.outputs.sha }}
+      publish_release: true
+    permissions:
+      contents: write

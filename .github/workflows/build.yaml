@@ -1,6 +1,18 @@
 name: build
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or branch to build
+        required: false
+        type: string
+        default: ""
+      publish_release:
+        description: Publish Stats.app.zip as a public GitHub Release
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
   push:
     branches:
@@ -18,7 +30,10 @@ jobs:
     runs-on: macos-15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+          persist-credentials: false
       - name: Build application
         shell: bash
         run: |
@@ -39,7 +54,7 @@ jobs:
           done
       - name: Upload build log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Xcode-build-log
           path: xcodebuild.log
@@ -50,8 +65,26 @@ jobs:
           build/Build/Products/Release/Stats.app
           build/Stats.app.zip
       - name: Upload application
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Stats-macOS
           path: build/Stats.app.zip
           if-no-files-found: error
+      - name: Publish public release
+        if: ${{ inputs.publish_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          release_date="$(date -u +%Y-%m-%d)"
+          short_sha="${RELEASE_SHA:0:7}"
+          tag="weekly-${release_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" \
+            "build/Stats.app.zip#Stats.app.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "Stats weekly build ${release_date}" \
+            --notes "Automatic weekly build after merging exelban/stats. Fork commit: ${short_sha}." \
+            --latest
