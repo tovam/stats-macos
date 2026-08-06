@@ -212,7 +212,7 @@ public class Updater {
         
         print("DMG is mounted at \(mountPoint)")
         
-        let mountedApp = (mountPoint as NSString).appendingPathComponent("Stats.app")
+        let mountedApp = (mountPoint as NSString).appendingPathComponent("Stats Compact.app")
         if let err = self.validateAppSignature(at: mountedApp) {
             _ = self.runProcess("/usr/bin/hdiutil", ["detach", mountPoint, "-force"])
             try? FileManager.default.removeItem(atPath: mountPoint)

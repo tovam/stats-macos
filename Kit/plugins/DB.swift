@@ -32,8 +32,8 @@ public class DB {
     
     init() {
         let fileManager = FileManager.default
-        let supportPath = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Stats")
-        let tmpPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Stats")
+        let supportPath = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Stats Compact")
+        let tmpPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("StatsCompact")
         
         try? fileManager.createDirectory(at: supportPath, withIntermediateDirectories: true, attributes: nil)
         try? fileManager.createDirectory(at: tmpPath, withIntermediateDirectories: true, attributes: nil)

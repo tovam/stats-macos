@@ -45,7 +45,7 @@ public struct RAM_entry: TimelineEntry {
 public struct Provider: TimelineProvider {
     public typealias Entry = RAM_entry
     
-    private let userDefaults: UserDefaults? = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).eu.exelban.Stats.widgets")
+    private let userDefaults: UserDefaults? = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).com.tovam.StatsCompact.widgets")
     
     public var systemWidgetsUpdatesState: Bool {
         self.userDefaults?.bool(forKey: "systemWidgetsUpdates_state") ?? false

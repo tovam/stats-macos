@@ -1303,7 +1303,7 @@ extension MQTTManager: URLSessionWebSocketDelegate {
 // MARK: - Keychain
 
 enum RemoteKeychain {
-    private static let service: String = (Bundle.main.bundleIdentifier ?? "eu.exelban.Stats") + ".remote"
+    private static let service: String = (Bundle.main.bundleIdentifier ?? "com.tovam.StatsCompact") + ".remote"
     
     static func read(_ key: String) -> String? {
         let query: [String: Any] = [

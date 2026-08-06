@@ -9,14 +9,14 @@ on:
         type: string
         default: ""
       publish_release:
-        description: Publish Stats.app.zip as a public GitHub Release
+        description: Publish Stats-Compact.app.zip as a public GitHub Release
         required: false
         type: boolean
         default: false
   workflow_dispatch:
     inputs:
       publish_release:
-        description: Publish Stats.app.zip as a public GitHub Release
+        description: Publish Stats-Compact.app.zip as a public GitHub Release
         required: false
         type: boolean
         default: false
@@ -70,13 +70,13 @@ jobs:
       - name: Package application
         run: >-
           ditto -c -k --keepParent
-          build/Build/Products/Release/Stats.app
-          build/Stats.app.zip
+          "build/Build/Products/Release/Stats Compact.app"
+          build/Stats-Compact.app.zip
       - name: Upload application
         uses: actions/upload-artifact@v7
         with:
-          name: Stats-macOS
-          path: build/Stats.app.zip
+          name: Stats-Compact-macOS
+          path: build/Stats-Compact.app.zip
           if-no-files-found: error
       - name: Publish public release
         if: ${{ inputs.publish_release || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')) }}
@@ -90,9 +90,9 @@ jobs:
           short_sha="${RELEASE_SHA:0:7}"
           tag="weekly-${release_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
           gh release create "$tag" \
-            "build/Stats.app.zip#Stats.app.zip" \
+            "build/Stats-Compact.app.zip#Stats-Compact.app.zip" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$RELEASE_SHA" \
-            --title "Stats weekly build ${release_date}" \
-            --notes "Automatic weekly build after merging exelban/stats. Fork commit: ${short_sha}." \
+            --title "Stats Compact weekly build ${release_date}" \
+            --notes "Automatic Stats Compact build after merging exelban/stats. Fork commit: ${short_sha}." \
             --latest

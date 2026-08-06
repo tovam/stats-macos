@@ -31,7 +31,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "9A1410F4229E721100D29793"
-               BuildableName = "Stats.app"
+               BuildableName = "Stats Compact.app"
                BlueprintName = "Stats"
                ReferencedContainer = "container:Stats.xcodeproj">
             </BuildableReference>
@@ -73,7 +73,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9A1410F4229E721100D29793"
-            BuildableName = "Stats.app"
+            BuildableName = "Stats Compact.app"
             BlueprintName = "Stats"
             ReferencedContainer = "container:Stats.xcodeproj">
          </BuildableReference>
@@ -109,7 +109,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9A1410F4229E721100D29793"
-            BuildableName = "Stats.app"
+            BuildableName = "Stats Compact.app"
             BlueprintName = "Stats"
             ReferencedContainer = "container:Stats.xcodeproj">
          </BuildableReference>

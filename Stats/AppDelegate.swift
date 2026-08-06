@@ -47,9 +47,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     internal var combinedView: CombinedView = CombinedView()
     internal var modulesMounted: Bool = false
     
-    internal let updateActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.updateCheck")
-    internal let supportActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.support")
-    internal let supportRetryActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.supportRetry")
+    internal let updateActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.updateCheck")
+    internal let supportActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.support")
+    internal let supportRetryActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.supportRetry")
     
     internal var clickInNotification: Bool = false
     

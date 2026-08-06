@@ -1118,8 +1118,8 @@ public enum SMCHelperInstallState {
 public class SMCHelper {
     public static let shared = SMCHelper()
     
-    private let id: String = "eu.exelban.Stats.SMC.Helper"
-    private let plistName: String = "eu.exelban.Stats.SMC.Helper.plist"
+    private let id: String = "com.tovam.StatsCompact.SMC.Helper"
+    private let plistName: String = "com.tovam.StatsCompact.SMC.Helper.plist"
     
     public var isInstalled: Bool {
         if #available(macOS 13, *) {
@@ -1180,7 +1180,7 @@ public class SMCHelper {
             guard SMAppService.daemon(plistName: self.plistName).status == .enabled else { return }
         }
         
-        let helperURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/eu.exelban.Stats.SMC.Helper")
+        let helperURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/com.tovam.StatsCompact.SMC.Helper")
         guard let helperBundleInfo = CFBundleCopyInfoDictionaryForURL(helperURL as CFURL) as? [String: Any],
               let helperVersion = helperBundleInfo["CFBundleShortVersionString"] as? String,
               let helper = self.helper(nil) else { return }
@@ -1292,7 +1292,7 @@ public class SMCHelper {
         }
         
         var error: Unmanaged<CFError>?
-        if SMJobBless(kSMDomainSystemLaunchd, "eu.exelban.Stats.SMC.Helper" as CFString, authRef, &error) == false {
+        if SMJobBless(kSMDomainSystemLaunchd, "com.tovam.StatsCompact.SMC.Helper" as CFString, authRef, &error) == false {
             let blessError = error!.takeRetainedValue() as Error
             print("Error while installing the Helper: \(blessError.localizedDescription)")
             completion(.failed)
@@ -1308,7 +1308,7 @@ public class SMCHelper {
             return self.connection
         }
         
-        let connection = NSXPCConnection(machServiceName: "eu.exelban.Stats.SMC.Helper", options: .privileged)
+        let connection = NSXPCConnection(machServiceName: "com.tovam.StatsCompact.SMC.Helper", options: .privileged)
         connection.exportedObject = self
         connection.remoteObjectInterface = NSXPCInterface(with: HelperProtocol.self)
         connection.invalidationHandler = { [weak self] in

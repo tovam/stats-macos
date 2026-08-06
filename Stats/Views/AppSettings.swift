@@ -33,11 +33,11 @@ class ApplicationSettings: NSStackView {
     
     private var systemWidgetsUpdatesState: Bool {
         get {
-            let userDefaults = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).eu.exelban.Stats.widgets")
+            let userDefaults = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).com.tovam.StatsCompact.widgets")
             return userDefaults?.bool(forKey: "systemWidgetsUpdates_state") ?? false
         }
         set {
-            let userDefaults = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).eu.exelban.Stats.widgets")
+            let userDefaults = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).com.tovam.StatsCompact.widgets")
             userDefaults?.set(newValue, forKey: "systemWidgetsUpdates_state")
         }
     }
@@ -256,7 +256,7 @@ class ApplicationSettings: NSStackView {
         let statsName: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 22))
         statsName.alignment = .center
         statsName.font = NSFont.systemFont(ofSize: 20, weight: .regular)
-        statsName.stringValue = "Stats"
+        statsName.stringValue = "Stats Compact"
         statsName.isSelectable = true
         
         let versionNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String

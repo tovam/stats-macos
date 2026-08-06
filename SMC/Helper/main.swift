@@ -17,7 +17,7 @@ helper.run()
 
 class Helper: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private let listener: NSXPCListener
-    private let smcQueue = DispatchQueue(label: "eu.exelban.Stats.SMC.Helper.smcQueue")
+    private let smcQueue = DispatchQueue(label: "com.tovam.StatsCompact.SMC.Helper.smcQueue")
     
     private var connections = [NSXPCConnection]()
     private var shouldQuit = false
@@ -26,7 +26,7 @@ class Helper: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private var smc: String? = nil
     
     override init() {
-        self.listener = NSXPCListener(machServiceName: "eu.exelban.Stats.SMC.Helper")
+        self.listener = NSXPCListener(machServiceName: "com.tovam.StatsCompact.SMC.Helper")
         super.init()
         self.listener.delegate = self
     }
@@ -87,7 +87,7 @@ class Helper: NSObject, NSXPCListenerDelegate, HelperProtocol {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.qualityOfService = QualityOfService.userInitiated
-        process.arguments = ["unload", "/Library/LaunchDaemons/eu.exelban.Stats.SMC.Helper.plist"]
+        process.arguments = ["unload", "/Library/LaunchDaemons/com.tovam.StatsCompact.SMC.Helper.plist"]
         do {
             try process.run()
             process.waitUntilExit()
@@ -101,14 +101,14 @@ class Helper: NSObject, NSXPCListenerDelegate, HelperProtocol {
         }
         
         do {
-            try FileManager.default.removeItem(at: URL(fileURLWithPath: "/Library/LaunchDaemons/eu.exelban.Stats.SMC.Helper.plist"))
+            try FileManager.default.removeItem(at: URL(fileURLWithPath: "/Library/LaunchDaemons/com.tovam.StatsCompact.SMC.Helper.plist"))
         } catch let err {
             NSLog("plist deletion: \(err)")
         }
         NSLog("property list deleted")
         
         do {
-            try FileManager.default.removeItem(at: URL(fileURLWithPath: "/Library/PrivilegedHelperTools/eu.exelban.Stats.SMC.Helper"))
+            try FileManager.default.removeItem(at: URL(fileURLWithPath: "/Library/PrivilegedHelperTools/com.tovam.StatsCompact.SMC.Helper"))
         } catch let err {
             NSLog("helper deletion: \(err)")
         }
@@ -218,7 +218,7 @@ extension Helper {
     
     func uninstall() {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/Library/PrivilegedHelperTools/eu.exelban.Stats.SMC.Helper")
+        process.executableURL = URL(fileURLWithPath: "/Library/PrivilegedHelperTools/com.tovam.StatsCompact.SMC.Helper")
         process.qualityOfService = QualityOfService.userInitiated
         process.arguments = ["uninstall", String(getpid())]
         do {
