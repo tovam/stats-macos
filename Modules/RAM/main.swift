@@ -148,6 +148,11 @@ public class RAM: Module {
     
     private func loadCallback(_ raw: RAM_Usage?) {
         guard let value = raw, self.enabled else { return }
+
+        NotificationCenter.default.post(name: .compactRAMUsage, object: [
+            "usage": value.usage,
+            "swap": value.swap.used
+        ])
         
         self.popupView.loadCallback(value)
         self.portalView.callback(value)

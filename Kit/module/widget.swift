@@ -384,7 +384,7 @@ public class MenuBar {
     private var queue: DispatchQueue
     
     private var combinedModules: Bool {
-        Store.shared.bool(key: "CombinedModules", defaultValue: false)
+        Store.shared.bool(key: "CombinedModules", defaultValue: true)
     }
     
     public var view: MenuBarView = MenuBarView()

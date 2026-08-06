@@ -311,6 +311,8 @@ public class Disk: Module {
         guard let d = value.first(where: { $0.mediaName == self.selectedDisk }) ?? value.first(where: { $0.root }) else {
             return
         }
+
+        NotificationCenter.default.post(name: .compactDiskFree, object: d.free)
         
         self.portalView.utilizationCallback(d)
         self.notificationsView.utilizationCallback(d.percentage)

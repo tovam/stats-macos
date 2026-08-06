@@ -14,17 +14,11 @@ import Kit
 
 internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
     private var menuBarItem: NSStatusItem? = nil
-    private var view: NSView = NSView(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
+    private var view: CompactSystemView = CompactSystemView()
     private var popup: PopupWindow? = nil
     
     private var status: Bool {
-        Store.shared.bool(key: "CombinedModules", defaultValue: false)
-    }
-    private var spacing: CGFloat {
-        CGFloat(Int(Store.shared.string(key: "CombinedModules_spacing", defaultValue: "")) ?? 0)
-    }
-    private var separator: Bool {
-        Store.shared.bool(key: "CombinedModules_separator", defaultValue: false)
+        Store.shared.bool(key: "CombinedModules", defaultValue: true)
     }
     
     private var activeModules: [Module] {
@@ -50,6 +44,10 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
         }
         
         self.popup = PopupWindow(title: "Combined modules", module: .combined, view: Popup()) { _ in }
+
+        self.view.widthCallback = { [weak self] width in
+            self?.menuBarItem?.length = width
+        }
         
         if self.status {
             self.enable()
@@ -57,11 +55,13 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForOneView), name: .toggleOneView, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(listenForModuleRearrrange), name: .moduleRearrange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(listenForCPUUsage), name: .compactCPUUsage, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(listenForRAMUsage), name: .compactRAMUsage, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(listenForDiskFree), name: .compactDiskFree, object: nil)
     }
     
     deinit {
-        NotificationCenter.default.removeObserver(self, name: .toggleOneView, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .moduleRearrange, object: nil)
+        NotificationCenter.default.removeObserver(self)
     }
     
     public func enable() {
@@ -90,27 +90,7 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
     }
     
     private func recalculate() {
-        self.view.subviews.forEach({ $0.removeFromSuperview() })
-        
-        let visibleModules = self.activeModules.filter({ !$0.menuBar.activeWidgets.isEmpty })
-        var w: CGFloat = 0
-        visibleModules.enumerated().forEach { (i, m) in
-            if i != 0 {
-                w += self.spacing
-                if self.separator {
-                    let separator = NSView(frame: NSRect(x: w, y: 3, width: 1, height: Constants.Widget.height-6))
-                    separator.wantsLayer = true
-                    separator.layer?.backgroundColor = (separator.isDarkMode ? NSColor.white : NSColor.black).cgColor
-                    self.view.addSubview(separator)
-                    w += 3 + self.spacing
-                }
-            }
-            self.view.addSubview(m.menuBar.view)
-            m.menuBar.view.setFrameOrigin(NSPoint(x: w, y: 0))
-            w += m.menuBar.view.frame.width
-        }
-        self.view.setFrameSize(NSSize(width: w, height: self.view.frame.height))
-        self.menuBarItem?.length = w
+        self.view.recalculateWidth()
     }
     
     // call when popup appear/disappear
@@ -127,17 +107,16 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
     private func openModulePopup() {
         guard let window = self.menuBarItem?.button?.window else { return }
         let location = self.view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
-        let visibleModules = self.activeModules.filter({ !$0.menuBar.activeWidgets.isEmpty })
-        guard let module = visibleModules.last(where: { $0.menuBar.view.frame.minX <= location.x }) ?? visibleModules.first else { return }
+        let moduleName = self.view.module(at: location)
+        guard let module = self.activeModules.first(where: { $0.name == moduleName }) else { return }
         
         var userInfo: [String: Any] = [
             "module": module.name,
             "origin": window.frame.origin,
             "center": window.frame.width/2
         ]
-        let widgetLocation = module.menuBar.view.convert(location, from: self.view)
         let widgets = module.menuBar.activeWidgets
-        if let widget = widgets.last(where: { $0.item.frame.minX <= widgetLocation.x }) ?? widgets.first {
+        if let widget = widgets.first {
             userInfo["widget"] = widget.type
         }
         NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: userInfo)
@@ -186,6 +165,172 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
     
     @objc private func listenForModuleRearrrange() {
         self.recalculate()
+    }
+
+    @objc private func listenForCPUUsage(_ notification: Notification) {
+        guard let value = notification.object as? Double else { return }
+        self.view.setCPU(value)
+    }
+
+    @objc private func listenForRAMUsage(_ notification: Notification) {
+        guard let value = notification.object as? [String: Double],
+              let usage = value["usage"], let swap = value["swap"] else { return }
+        self.view.setRAM(usage, swap: swap)
+    }
+
+    @objc private func listenForDiskFree(_ notification: Notification) {
+        guard let value = notification.object as? Int64 else { return }
+        self.view.setDiskFree(value)
+    }
+}
+
+private class CompactSystemView: NSView {
+    fileprivate var widthCallback: ((CGFloat) -> Void)?
+
+    private let horizontalPadding: CGFloat = 4
+    private let columnSpacing: CGFloat = 7
+    private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.usesSignificantDigits = true
+        formatter.minimumSignificantDigits = 2
+        formatter.maximumSignificantDigits = 2
+        return formatter
+    }()
+    private let smallGigabytesFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+
+    private var cpu: Double?
+    private var ram: Double?
+    private var diskFree: Int64?
+    private var swap: Double?
+    private var firstColumnWidth: CGFloat = 0
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
+        self.recalculateWidth()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    fileprivate func setCPU(_ value: Double) {
+        DispatchQueue.main.async {
+            self.cpu = value
+            self.refresh()
+        }
+    }
+
+    fileprivate func setRAM(_ value: Double, swap: Double) {
+        DispatchQueue.main.async {
+            self.ram = value
+            self.swap = swap
+            self.refresh()
+        }
+    }
+
+    fileprivate func setDiskFree(_ value: Int64) {
+        DispatchQueue.main.async {
+            self.diskFree = value
+            self.refresh()
+        }
+    }
+
+    fileprivate func recalculateWidth() {
+        let first = max(self.width(of: self.cpuText), self.width(of: self.ramText))
+        let second = max(self.width(of: self.diskFreeText), self.width(of: self.swapText))
+        self.firstColumnWidth = first
+
+        let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second
+        self.setFrameSize(NSSize(width: width, height: Constants.Widget.height))
+        self.widthCallback?(width)
+    }
+
+    fileprivate func module(at point: NSPoint) -> String {
+        let firstColumnMaxX = self.horizontalPadding + self.firstColumnWidth + (self.columnSpacing / 2)
+        if point.x <= firstColumnMaxX {
+            return point.y >= self.bounds.midY ? "CPU" : "RAM"
+        }
+        return point.y >= self.bounds.midY ? "Disk" : "RAM"
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let firstX = self.horizontalPadding
+        let secondX = firstX + self.firstColumnWidth + self.columnSpacing
+        self.draw(self.cpuText, x: firstX, top: true)
+        self.draw(self.ramText, x: firstX, top: false)
+        self.draw(self.diskFreeText, x: secondX, top: true)
+        self.draw(self.swapText, x: secondX, top: false)
+    }
+
+    private func refresh() {
+        self.recalculateWidth()
+        self.needsDisplay = true
+    }
+
+    private func draw(_ text: String, x: CGFloat, top: Bool) {
+        let rowHeight = self.bounds.height / 2
+        let rect = NSRect(
+            x: x,
+            y: top ? rowHeight + 1 : 1,
+            width: self.width(of: text) + 1,
+            height: rowHeight
+        )
+        NSAttributedString(string: text, attributes: [
+            .font: self.font,
+            .foregroundColor: NSColor.textColor
+        ]).draw(with: rect)
+    }
+
+    private func width(of text: String) -> CGFloat {
+        text.widthOfString(usingFont: self.font).rounded(.up) + 1
+    }
+
+    private var cpuText: String {
+        guard let value = self.cpu else { return "C --%" }
+        return "C \(self.percentage(value))%"
+    }
+
+    private var ramText: String {
+        guard let value = self.ram else { return "R --%" }
+        return "R \(self.percentage(value))%"
+    }
+
+    private var diskFreeText: String {
+        guard let value = self.diskFree else { return "Fr -- GB" }
+        return "Fr \(self.gigabytes(Double(value))) GB"
+    }
+
+    private var swapText: String {
+        guard let value = self.swap else { return "Sw -- GB" }
+        return "Sw \(self.gigabytes(value)) GB"
+    }
+
+    private func significant(_ value: Double) -> String {
+        self.numberFormatter.string(from: NSNumber(value: max(0, value))) ?? "0"
+    }
+
+    private func percentage(_ value: Double) -> String {
+        self.significant(min(100, max(0, value * 100)))
+    }
+
+    private func gigabytes(_ bytes: Double) -> String {
+        let value = max(0, bytes / 1_073_741_824)
+        if (value * 10).rounded() / 10 < 10 {
+            return self.smallGigabytesFormatter.string(from: NSNumber(value: value)) ?? "0.0"
+        }
+        return self.significant(value)
     }
 }
 

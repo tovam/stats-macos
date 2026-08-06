@@ -195,6 +195,8 @@ public class CPU: Module {
     
     private func loadCallback(_ raw: CPU_Load?) {
         guard let value = raw, self.enabled else { return }
+
+        NotificationCenter.default.post(name: .compactCPUUsage, object: value.totalUsage)
         
         self.popupView.loadCallback(value)
         self.portalView.callback(value)
