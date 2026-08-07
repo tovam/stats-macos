@@ -379,6 +379,12 @@ internal final class CompactCombinedBridge: NSObject {
             name: .compactColorScaleChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForUpdateStateChange),
+            name: .compactUpdateStateChanged,
+            object: nil
+        )
     }
 
     deinit {
@@ -403,6 +409,10 @@ internal final class CompactCombinedBridge: NSObject {
 
     @objc private func listenForColorScaleChange() {
         self.view?.refreshColors()
+    }
+
+    @objc private func listenForUpdateStateChange() {
+        self.view?.refreshUpdateIndicator()
     }
 }
 
@@ -455,6 +465,9 @@ internal final class CompactSystemView: NSView {
         }
         return self.baseColumnSpacing + self.configuredSpacing
     }
+    private var updateIndicatorWidth: CGFloat {
+        CompactUpdateMonitor.shared.needsAttention ? 9 : 0
+    }
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
@@ -500,6 +513,12 @@ internal final class CompactSystemView: NSView {
         }
     }
 
+    internal func refreshUpdateIndicator() {
+        DispatchQueue.main.async {
+            self.recalculateWidth()
+        }
+    }
+
     internal func recalculateWidth() {
         self.firstLabelWidth = max(self.width(of: self.cpuLabel), self.width(of: self.ramLabel))
         self.firstValueWidth = max(self.width(of: self.cpuValue), self.width(of: self.ramValue))
@@ -510,7 +529,8 @@ internal final class CompactSystemView: NSView {
         let second = self.secondLabelWidth + self.labelValueSpacing + self.secondValueWidth
         self.firstColumnWidth = first
 
-        let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second
+        let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second +
+            self.updateIndicatorWidth
         self.setFrameSize(NSSize(width: width, height: Constants.Widget.height))
         self.widthCallback?(width)
         self.needsDisplay = true
@@ -546,6 +566,15 @@ internal final class CompactSystemView: NSView {
         self.draw(label: self.ramLabel, value: self.ramValue, metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
         self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
         self.draw(label: self.swapLabel, value: self.swapValue, metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
+        if CompactUpdateMonitor.shared.needsAttention {
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: NSRect(
+                x: self.bounds.maxX - 6,
+                y: (self.bounds.midY - 2.5).rounded(.down),
+                width: 5,
+                height: 5
+            )).fill()
+        }
     }
 
     private func refresh() {
@@ -698,6 +727,7 @@ internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate 
         ) { _ in }
         self.view.widthCallback = { [weak self] width in
             self?.menuBarItem?.length = width
+            self?.updateToolTip()
         }
 
         if self.status {
@@ -755,6 +785,14 @@ internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate 
 
     private func recalculate() {
         self.view.recalculateWidth()
+    }
+
+    private func updateToolTip() {
+        let base = localizedString("Combined modules")
+        let state = CompactUpdateMonitor.shared.snapshot
+        self.menuBarItem?.button?.toolTip = state.needsAttention
+            ? "\(base)\n\(state.message)"
+            : base
     }
 
     @objc private func handleClick() {

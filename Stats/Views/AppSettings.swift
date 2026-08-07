@@ -287,7 +287,8 @@ class ApplicationSettings: NSStackView {
         statsVersion.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         statsVersion.stringValue = "\(localizedString("Version")) \(versionNumber)"
         statsVersion.isSelectable = true
-        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)"
+        let releaseTag = Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String ?? "unstamped"
+        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)\nFork release: \(releaseTag)"
         
         let updateButton: NSButton = NSButton()
         updateButton.title = localizedString("Check for update")
@@ -298,11 +299,13 @@ class ApplicationSettings: NSStackView {
         container.addRow(with: [iconView])
         container.addRow(with: [statsName])
         container.addRow(with: [statsVersion])
+        container.addRow(with: [CompactUpdateStatusView()])
         container.addRow(with: [updateButton])
         
         container.row(at: 1).height = 22
         container.row(at: 2).height = 20
-        container.row(at: 3).height = 30
+        container.row(at: 3).height = 22
+        container.row(at: 4).height = 30
         
         view.addArrangedSubview(container)
         

@@ -61,8 +61,8 @@ extension AppDelegate {
                 let dmgPath = args[dmgIndex+1]
                 let stdDmg = (dmgPath as NSString).standardizingPath
                 let downloads = (try? FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: false).path) ?? ""
-                let inDownloads = downloads.isEmpty || stdDmg.hasPrefix(downloads)
-                if stdDmg.hasSuffix(".dmg"), !stdDmg.contains(".."), inDownloads {
+                let inDownloads = !downloads.isEmpty && stdDmg.hasPrefix(downloads + "/")
+                if (stdDmg.hasSuffix(".dmg") || stdDmg.hasSuffix(".zip")), !stdDmg.contains(".."), inDownloads {
                     try? FileManager.default.removeItem(atPath: dmgPath)
                     debug("DMG was deleted")
                 } else {
@@ -88,7 +88,8 @@ extension AppDelegate {
                 return
             }
             
-            if updateInterval != .silent && isNewestVersion(currentVersion: prevVersion, latestVersion: currentVersion) {
+            if updateInterval != .silent && !CompactUpdateMonitor.shared.subtleNotificationsOnly &&
+                isNewestVersion(currentVersion: prevVersion, latestVersion: currentVersion) {
                 let title: String = localizedString("Successfully updated")
                 let subtitle: String = localizedString("Stats was updated to v", currentVersion)
                 
@@ -189,6 +190,10 @@ extension AppDelegate {
             }
             
             if !version.newest {
+                return
+            }
+
+            if updater.usesSubtleIndicator {
                 return
             }
             

@@ -211,7 +211,7 @@ private class UpdateView: NSView {
         let title: NSTextField = TextView(frame: NSRect(x: 0, y: ((view.frame.height - 18)/2), width: view.frame.width, height: 34))
         title.font = NSFont.systemFont(ofSize: 14, weight: .light)
         title.alignment = .center
-        title.stringValue = localizedString("The latest version of Stats installed")
+        title.stringValue = "Stats Compact is up to date"
         
         let button: NSButton = NSButton(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 26))
         button.title = localizedString("Close")
@@ -294,14 +294,14 @@ private class UpdateView: NSView {
     
     @objc private func changelog() {
         if let version = self.version {
-            NSWorkspace.shared.open(URL(string: "https://github.com/exelban/stats/releases/tag/\(version.latest)")!)
+            NSWorkspace.shared.open(URL(string: "https://github.com/tovam/stats-macos/releases/tag/\(version.latest)")!)
         }
     }
     
     @objc private func install() {
         updater.install(path: self.path) { error in
             if let error {
-                showAlert("Error update Stats", error, .critical)
+                showAlert("Stats Compact update", error, .critical)
             }
         }
     }

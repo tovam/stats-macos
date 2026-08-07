@@ -53,6 +53,30 @@ jobs:
             -derivedDataPath build \
             build \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log
+      - name: Stamp fork release metadata
+        id: release_metadata
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+        run: |
+          set -euo pipefail
+          app_plist="build/Build/Products/Release/Stats Compact.app/Contents/Info.plist"
+          test -f "$app_plist"
+
+          release_date="$(date -u +%Y-%m-%d)"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          short_sha="${RELEASE_SHA:0:7}"
+          tag="weekly-${release_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
+
+          /usr/libexec/PlistBuddy -c "Delete :CompactReleaseTag" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactBuildSHA" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactBuildDate" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactReleaseRepository" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CompactReleaseTag string $tag" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactBuildSHA string $RELEASE_SHA" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactBuildDate string $build_date" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactReleaseRepository string tovam/stats-macos" "$app_plist"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Report build errors
         if: failure()
         shell: bash
@@ -84,12 +108,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
         run: |
           set -euo pipefail
           release_date="$(date -u +%Y-%m-%d)"
           short_sha="${RELEASE_SHA:0:7}"
-          tag="weekly-${release_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" \
+          gh release create "$RELEASE_TAG" \
             "build/Stats-Compact.app.zip#Stats-Compact.app.zip" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$RELEASE_SHA" \
