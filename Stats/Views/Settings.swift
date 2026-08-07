@@ -112,10 +112,11 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.type == NSEvent.EventType.keyDown && event.modifierFlags.contains(.command) {
-            if event.keyCode == 12 || event.keyCode == 13 {
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            if key == "q" || key == "w" {
                 self.close()
                 return true
-            } else if event.keyCode == 46 {
+            } else if key == "m" {
                 self.miniaturize(event)
                 return true
             }
