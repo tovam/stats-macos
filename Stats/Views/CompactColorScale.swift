@@ -228,3 +228,83 @@ internal final class CompactColorAnimator {
         }
     }
 }
+
+internal final class CompactCombinedPopup: NSStackView, Popup_p {
+    private let moduleOrder = [
+        ModuleType.CPU.stringValue,
+        ModuleType.RAM.stringValue,
+        ModuleType.disk.stringValue,
+        ModuleType.network.stringValue
+    ]
+
+    internal var keyboardShortcut: [UInt16]
+    internal var sizeCallback: ((NSSize) -> Void)?
+
+    init() {
+        self.keyboardShortcut = Store.shared.array(
+            key: "CombinedModules_popup_keyboardShortcut",
+            defaultValue: []
+        ) as? [UInt16] ?? []
+        self.sizeCallback = nil
+
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
+
+        self.orientation = .horizontal
+        self.distribution = .fillEqually
+        self.alignment = .top
+        self.spacing = Constants.Popup.spacing * 3
+
+        self.reinit()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.reinit),
+            name: .toggleModule,
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .toggleModule, object: nil)
+    }
+
+    internal func settings() -> NSView? { nil }
+    internal func appear() {}
+    internal func disappear() {}
+
+    internal func setKeyboardShortcut(_ binding: [UInt16]) {
+        self.keyboardShortcut = binding
+        Store.shared.set(key: "CombinedModules_popup_keyboardShortcut", value: binding)
+    }
+
+    @objc private func reinit() {
+        self.arrangedSubviews.forEach { view in
+            self.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+
+        let portals = self.moduleOrder.compactMap { name in
+            modules.first(where: { $0.name == name && $0.enabled })?.portal
+        }
+        portals.forEach(self.addArrangedSubview)
+
+        guard !portals.isEmpty else {
+            self.setFrameSize(NSSize(width: Constants.Popup.width, height: 0))
+            self.sizeCallback?(self.frame.size)
+            return
+        }
+
+        let columns = CGFloat(portals.count)
+        let preferredWidth = (columns * Constants.Popup.width) + ((columns - 1) * self.spacing)
+        let screenWidth = (NSScreen.main?.visibleFrame.width ?? preferredWidth)
+            - (Constants.Popup.margins * 2) - 6
+        let width = min(preferredWidth, max(Constants.Popup.width, screenWidth))
+        let height = portals.map { $0.height }.max() ?? 0
+
+        self.setFrameSize(NSSize(width: width, height: height))
+        self.sizeCallback?(self.frame.size)
+    }
+}

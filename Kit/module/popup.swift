@@ -271,6 +271,7 @@ internal class PopupView: NSView {
             width: size.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: size.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
+        self.header.setFrameSize(NSSize(width: size.width, height: self.header.frame.height))
         self.header.setFrameOrigin(NSPoint(x: 0, y: size.height - Constants.Popup.headerHeight))
         
         if let view = view {
@@ -335,6 +336,7 @@ internal class PopupView: NSView {
             width: windowSize.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: windowSize.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
+        self.header.setFrameSize(NSSize(width: windowSize.width, height: self.header.frame.height))
         self.header.setFrameOrigin(NSPoint(
             x: self.header.frame.origin.x,
             y: self.body.frame.height + (Constants.Popup.margins*2)

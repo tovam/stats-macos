@@ -43,7 +43,7 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
             }
         }
         
-        self.popup = PopupWindow(title: "Combined modules", module: .combined, view: Popup()) { _ in }
+        self.popup = PopupWindow(title: "Combined modules", module: .combined, view: CompactCombinedPopup()) { _ in }
 
         self.view.widthCallback = { [weak self] width in
             self?.menuBarItem?.length = width
