@@ -91,6 +91,7 @@ open class Module {
     public var userDefaults: UserDefaults? = UserDefaults(suiteName: "\(Bundle.main.object(forInfoDictionaryKey: "TeamId") as! String).com.tovam.StatsCompact.widgets")
     
     public var popupKeyboardShortcut: [UInt16] { self.popupView?.keyboardShortcut ?? [] }
+    public var popupContentView: Popup_p? { self.popupView }
     
     private var moduleType: ModuleType
     
@@ -237,6 +238,14 @@ open class Module {
     
     public func setReaders(_ list: [Reader_p?]) {
         self.readers = list.filter({ $0 != nil }).map({ $0! as Reader_p })
+    }
+
+    public func setPopupContentActive(_ state: Bool) {
+        self.popupVisibilityCallback(state)
+    }
+
+    public func restorePopupContent() {
+        self.popup?.setView(self.popupView)
     }
     
     // determine if module is available (can be overrided in module)

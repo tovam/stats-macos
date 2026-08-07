@@ -42,15 +42,94 @@ internal enum CompactMetric: String, CaseIterable {
         case .swap: return [0, 2, 4, 8, 16]
         }
     }
+
+    var defaultRange: ClosedRange<Double> {
+        switch self {
+        case .cpu, .ram, .free: return 0...100
+        case .swap: return 0...16
+        }
+    }
+
+    var defaultConfiguration: CompactColorScaleConfiguration {
+        CompactColorScaleConfiguration(
+            minimum: self.defaultRange.lowerBound,
+            maximum: self.defaultRange.upperBound,
+            mode: .linear,
+            stops: zip(self.defaultThresholds, CompactColorScale.legacyColors).map {
+                CompactColorStop(value: $0.0, color: $0.1)
+            }
+        )
+    }
 }
 
-internal enum CompactScaleDirection: Equatable {
-    case increasing
-    case decreasing
+internal enum CompactScaleMode: String, Codable, CaseIterable {
+    case linear
+    case logarithmic
+
+    var title: String {
+        switch self {
+        case .linear: return "Linear"
+        case .logarithmic: return "Log"
+        }
+    }
+}
+
+internal struct CompactColorStop: Codable, Equatable {
+    var id: UUID
+    var value: Double
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double
+
+    init(id: UUID = UUID(), value: Double, color: NSColor) {
+        let rgb = color.usingColorSpace(.deviceRGB) ?? color
+        self.id = id
+        self.value = value
+        self.red = Double(rgb.redComponent)
+        self.green = Double(rgb.greenComponent)
+        self.blue = Double(rgb.blueComponent)
+        self.alpha = Double(rgb.alphaComponent)
+    }
+
+    var color: NSColor {
+        NSColor(
+            deviceRed: CGFloat(self.red),
+            green: CGFloat(self.green),
+            blue: CGFloat(self.blue),
+            alpha: CGFloat(self.alpha)
+        )
+    }
+
+    mutating func setColor(_ color: NSColor) {
+        let rgb = color.usingColorSpace(.deviceRGB) ?? color
+        self.red = Double(rgb.redComponent)
+        self.green = Double(rgb.greenComponent)
+        self.blue = Double(rgb.blueComponent)
+        self.alpha = Double(rgb.alphaComponent)
+    }
+}
+
+internal struct CompactColorScaleConfiguration: Codable, Equatable {
+    var minimum: Double
+    var maximum: Double
+    var mode: CompactScaleMode
+    var stops: [CompactColorStop]
+
+    var isValid: Bool {
+        guard self.minimum.isFinite, self.maximum.isFinite, self.minimum < self.maximum,
+              self.stops.count >= 2 else { return false }
+        return self.stops.allSatisfy { stop in
+            stop.value.isFinite && stop.value >= self.minimum && stop.value <= self.maximum &&
+                [stop.red, stop.green, stop.blue, stop.alpha].allSatisfy {
+                    $0.isFinite && $0 >= 0 && $0 <= 1
+                }
+        }
+    }
 }
 
 internal struct CompactColorScale {
-    static let colors: [NSColor] = [
+    static let legacyColors: [NSColor] = [
         .white,
         .systemYellow,
         .systemOrange,
@@ -58,50 +137,54 @@ internal struct CompactColorScale {
         .systemPurple
     ]
 
-    let thresholds: [Double]
-
-    var direction: CompactScaleDirection? {
-        Self.direction(of: self.thresholds)
-    }
-
-    static func direction(of values: [Double]) -> CompactScaleDirection? {
-        guard values.count == Self.colors.count, values.allSatisfy({ $0.isFinite }) else { return nil }
-
-        let differences = zip(values.dropFirst(), values).map { next, previous in next - previous }
-        if differences.allSatisfy({ $0 > 0 }) {
-            return .increasing
-        }
-        if differences.allSatisfy({ $0 < 0 }) {
-            return .decreasing
-        }
-        return nil
-    }
+    let configuration: CompactColorScaleConfiguration
 
     func color(for value: Double) -> NSColor {
-        guard let direction = self.direction else { return Self.colors[0] }
+        let stops = self.configuration.stops.enumerated().sorted { lhs, rhs in
+            lhs.element.value == rhs.element.value ? lhs.offset < rhs.offset : lhs.element.value < rhs.element.value
+        }.map(\.element)
+        guard let first = stops.first, let last = stops.last else { return .white }
+        if value < first.value { return first.color }
+        if value >= last.value { return last.color }
 
-        switch direction {
-        case .increasing:
-            if value <= self.thresholds[0] { return Self.colors[0] }
-            if value >= self.thresholds[4] { return Self.colors[4] }
-        case .decreasing:
-            if value >= self.thresholds[0] { return Self.colors[0] }
-            if value <= self.thresholds[4] { return Self.colors[4] }
+        for index in 0..<(stops.count - 1) {
+            let start = stops[index]
+            let end = stops[index + 1]
+            if end.value <= start.value || value >= end.value { continue }
+            let startPosition = self.position(for: start.value)
+            let endPosition = self.position(for: end.value)
+            let valuePosition = self.position(for: value)
+            let distance = endPosition - startPosition
+            let progress = distance == 0 ? 1 : (valuePosition - startPosition) / distance
+            return Self.interpolate(from: start.color, to: end.color, progress: progress)
         }
 
-        for index in 0..<4 {
-            let start = self.thresholds[index]
-            let end = self.thresholds[index + 1]
-            let isInside = direction == .increasing
-                ? value >= start && value <= end
-                : value <= start && value >= end
-            if isInside {
-                let progress = (value - start) / (end - start)
-                return Self.interpolate(from: Self.colors[index], to: Self.colors[index + 1], progress: progress)
-            }
-        }
+        return last.color
+    }
 
-        return Self.colors[4]
+    func position(for value: Double) -> Double {
+        let minimum = self.configuration.minimum
+        let span = self.configuration.maximum - minimum
+        guard span > 0 else { return 0 }
+        let offset = min(span, max(0, value - minimum))
+        switch self.configuration.mode {
+        case .linear:
+            return offset / span
+        case .logarithmic:
+            return log1p(offset) / log1p(span)
+        }
+    }
+
+    func value(at position: Double) -> Double {
+        let minimum = self.configuration.minimum
+        let span = self.configuration.maximum - minimum
+        let clamped = min(1, max(0, position))
+        switch self.configuration.mode {
+        case .linear:
+            return minimum + (clamped * span)
+        case .logarithmic:
+            return minimum + expm1(clamped * log1p(span))
+        }
     }
 
     static func interpolate(from: NSColor, to: NSColor, progress: Double) -> NSColor {
@@ -125,31 +208,64 @@ internal final class CompactColorScaleStore {
 
     private init() {}
 
-    func thresholds(for metric: CompactMetric) -> [Double] {
-        let fallback = self.serialize(metric.defaultThresholds)
-        let stored = Store.shared.string(key: self.key(for: metric), defaultValue: fallback)
-        let values = stored.split(separator: ",").compactMap { Double($0) }
-        return CompactColorScale.direction(of: values) == nil ? metric.defaultThresholds : values
+    func configuration(for metric: CompactMetric) -> CompactColorScaleConfiguration {
+        if let data = Store.shared.data(key: self.key(for: metric)),
+           let configuration = try? JSONDecoder().decode(CompactColorScaleConfiguration.self, from: data),
+           configuration.isValid {
+            return configuration
+        }
+
+        let migrated = self.migrateLegacyConfiguration(for: metric)
+        if let data = try? JSONEncoder().encode(migrated) {
+            Store.shared.set(key: self.key(for: metric), value: data)
+        }
+        return migrated
     }
 
     func scale(for metric: CompactMetric) -> CompactColorScale {
-        CompactColorScale(thresholds: self.thresholds(for: metric))
+        CompactColorScale(configuration: self.configuration(for: metric))
     }
 
     @discardableResult
-    func save(_ values: [Double], for metric: CompactMetric) -> Bool {
-        guard CompactColorScale.direction(of: values) != nil else { return false }
-        Store.shared.set(key: self.key(for: metric), value: self.serialize(values))
+    func save(_ configuration: CompactColorScaleConfiguration, for metric: CompactMetric) -> Bool {
+        guard configuration.isValid, let data = try? JSONEncoder().encode(configuration) else { return false }
+        Store.shared.set(key: self.key(for: metric), value: data)
         NotificationCenter.default.post(name: .compactColorScaleChanged, object: metric)
         return true
     }
 
-    private func key(for metric: CompactMetric) -> String {
-        "compact_color_scale_\(metric.rawValue)"
+    func reset(_ metric: CompactMetric) -> CompactColorScaleConfiguration {
+        let configuration = metric.defaultConfiguration
+        _ = self.save(configuration, for: metric)
+        return configuration
     }
 
-    private func serialize(_ values: [Double]) -> String {
-        values.map { String($0) }.joined(separator: ",")
+    private func key(for metric: CompactMetric) -> String {
+        "compact_color_gradient_\(metric.rawValue)"
+    }
+
+    private func migrateLegacyConfiguration(for metric: CompactMetric) -> CompactColorScaleConfiguration {
+        let legacyKey = "compact_color_scale_\(metric.rawValue)"
+        guard Store.shared.exist(key: legacyKey) else { return metric.defaultConfiguration }
+        let stored = Store.shared.string(key: legacyKey, defaultValue: "")
+        let values = stored.split(separator: ",").compactMap { Double($0) }
+        guard values.count == CompactColorScale.legacyColors.count,
+              values.allSatisfy(\.isFinite) else { return metric.defaultConfiguration }
+
+        var minimum = metric.defaultRange.lowerBound
+        var maximum = metric.defaultRange.upperBound
+        if let first = values.min() { minimum = min(minimum, first) }
+        if let last = values.max() { maximum = max(maximum, last) }
+        guard minimum < maximum else { return metric.defaultConfiguration }
+
+        return CompactColorScaleConfiguration(
+            minimum: minimum,
+            maximum: maximum,
+            mode: .linear,
+            stops: zip(values, CompactColorScale.legacyColors).map {
+                CompactColorStop(value: $0.0, color: $0.1)
+            }
+        )
     }
 }
 
@@ -173,7 +289,7 @@ internal final class CompactColorAnimator {
     }
 
     func color(for metric: CompactMetric) -> NSColor {
-        self.colors[metric] ?? CompactColorScale.colors[0]
+        self.colors[metric] ?? .white
     }
 
     func setTarget(_ color: NSColor, for metric: CompactMetric, animated: Bool = true) {
@@ -642,6 +758,16 @@ internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate 
     }
 
     @objc private func handleClick() {
+        if NSApp.currentEvent?.type == .rightMouseDown {
+            self.popup?.setIsVisible(false)
+            NotificationCenter.default.post(
+                name: .toggleSettings,
+                object: nil,
+                userInfo: ["module": "Settings"]
+            )
+            return
+        }
+
         if self.combinedModulesPopup {
             self.togglePopup()
         } else {
@@ -713,13 +839,21 @@ internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate 
     }
 }
 
-internal final class CompactCombinedPopup: NSStackView, Popup_p {
+internal final class CompactCombinedPopup: NSView, Popup_p {
+    private struct EmbeddedPopup {
+        let module: Module
+        let view: Popup_p
+        let column: CompactPopupColumn
+    }
+
     private let moduleOrder = [
         ModuleType.CPU.stringValue,
         ModuleType.RAM.stringValue,
         ModuleType.disk.stringValue,
         ModuleType.network.stringValue
     ]
+    private let columnSpacing = Constants.Popup.spacing * 3
+    private var embedded: [EmbeddedPopup] = []
 
     internal var keyboardShortcut: [UInt16]
     internal var sizeCallback: ((NSSize) -> Void)?
@@ -733,15 +867,10 @@ internal final class CompactCombinedPopup: NSStackView, Popup_p {
 
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
 
-        self.orientation = .horizontal
-        self.distribution = .fillEqually
-        self.alignment = .top
-        self.spacing = Constants.Popup.spacing * 3
-
-        self.reinit()
+        self.prepareFrame()
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(self.reinit),
+            selector: #selector(self.moduleStateChanged),
             name: .toggleModule,
             object: nil
         )
@@ -756,39 +885,156 @@ internal final class CompactCombinedPopup: NSStackView, Popup_p {
     }
 
     internal func settings() -> NSView? { nil }
-    internal func appear() {}
-    internal func disappear() {}
+    internal func appear() {
+        guard self.embedded.isEmpty else { return }
+
+        for module in self.orderedModules {
+            guard let view = module.popupContentView else { continue }
+            let column = CompactPopupColumn(title: module.name, content: view)
+            self.addSubview(column)
+            self.embedded.append(EmbeddedPopup(module: module, view: view, column: column))
+
+            view.sizeCallback = { [weak self, weak column] size in
+                column?.contentSizeDidChange(size)
+                self?.layoutColumns()
+            }
+            module.setPopupContentActive(true)
+            view.appear()
+        }
+        self.layoutColumns()
+    }
+
+    internal func disappear() {
+        guard !self.embedded.isEmpty else { return }
+        let current = self.embedded
+        self.embedded.removeAll()
+
+        for entry in current {
+            entry.view.disappear()
+            entry.module.setPopupContentActive(false)
+            entry.module.restorePopupContent()
+            entry.column.removeFromSuperview()
+        }
+        self.prepareFrame()
+    }
 
     internal func setKeyboardShortcut(_ binding: [UInt16]) {
         self.keyboardShortcut = binding
         Store.shared.set(key: "CombinedModules_popup_keyboardShortcut", value: binding)
     }
 
-    @objc private func reinit() {
-        self.arrangedSubviews.forEach { view in
-            self.removeArrangedSubview(view)
-            view.removeFromSuperview()
+    private var orderedModules: [Module] {
+        self.moduleOrder.compactMap { name in
+            modules.first(where: {
+                $0.name == name && $0.enabled && $0.available && $0.popupContentView != nil
+            })
         }
+    }
 
-        let portals = self.moduleOrder.compactMap { name in
-            modules.first(where: { $0.name == name && $0.enabled })?.portal
+    @objc private func moduleStateChanged() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.window?.isVisible == true {
+                self.disappear()
+                self.appear()
+            } else {
+                self.prepareFrame()
+            }
         }
-        portals.forEach(self.addArrangedSubview)
+    }
 
-        guard !portals.isEmpty else {
+    private func prepareFrame() {
+        let views = self.orderedModules.compactMap(\.popupContentView)
+        guard !views.isEmpty else {
             self.setFrameSize(NSSize(width: Constants.Popup.width, height: 0))
             self.sizeCallback?(self.frame.size)
             return
         }
 
-        let columns = CGFloat(portals.count)
-        let preferredWidth = (columns * Constants.Popup.width) + ((columns - 1) * self.spacing)
-        let screenWidth = (NSScreen.main?.visibleFrame.width ?? preferredWidth)
-            - (Constants.Popup.margins * 2) - 6
-        let width = min(preferredWidth, max(Constants.Popup.width, screenWidth))
-        let height = portals.map { $0.height }.max() ?? 0
+        let width = views.map(\.frame.width).reduce(0, +) +
+            (CGFloat(views.count - 1) * self.columnSpacing)
+        let height = views.map { $0.frame.height + CompactPopupColumn.headerHeight }.max() ?? 0
+        self.updateSize(NSSize(width: width, height: height))
+    }
 
-        self.setFrameSize(NSSize(width: width, height: height))
-        self.sizeCallback?(self.frame.size)
+    private func layoutColumns() {
+        guard !self.embedded.isEmpty else {
+            self.prepareFrame()
+            return
+        }
+
+        let height = self.embedded.map { $0.column.requiredSize.height }.max() ?? 0
+        var x: CGFloat = 0
+        for entry in self.embedded {
+            let size = entry.column.requiredSize
+            entry.column.setFrameOrigin(NSPoint(x: x, y: height - size.height))
+            entry.column.setFrameSize(size)
+            entry.column.layoutContent()
+            x += size.width + self.columnSpacing
+        }
+        x -= self.columnSpacing
+        self.updateSize(NSSize(width: max(Constants.Popup.width, x), height: height))
+    }
+
+    private func updateSize(_ size: NSSize) {
+        guard self.frame.size != size else { return }
+        self.setFrameSize(size)
+        self.sizeCallback?(size)
+    }
+}
+
+private final class CompactPopupColumn: NSView {
+    static let headerHeight: CGFloat = 25
+
+    private let content: Popup_p
+    private let titleField: NSTextField
+
+    var requiredSize: NSSize {
+        NSSize(
+            width: max(Constants.Popup.width, self.content.frame.width),
+            height: self.content.frame.height + Self.headerHeight
+        )
+    }
+
+    init(title: String, content: Popup_p) {
+        self.content = content
+        self.titleField = NSTextField(labelWithString: localizedString(title))
+        super.init(frame: NSRect(
+            x: 0,
+            y: 0,
+            width: max(Constants.Popup.width, content.frame.width),
+            height: content.frame.height + Self.headerHeight
+        ))
+
+        self.titleField.alignment = .center
+        self.titleField.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        self.titleField.textColor = .secondaryLabelColor
+        self.addSubview(content)
+        self.addSubview(self.titleField)
+        self.layoutContent()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func contentSizeDidChange(_ size: NSSize) {
+        self.content.setFrameSize(size)
+        self.setFrameSize(self.requiredSize)
+        self.layoutContent()
+    }
+
+    func layoutContent() {
+        let size = self.requiredSize
+        self.content.setFrameOrigin(NSPoint(
+            x: (size.width - self.content.frame.width) / 2,
+            y: 0
+        ))
+        self.titleField.frame = NSRect(
+            x: 0,
+            y: self.content.frame.height + 4,
+            width: size.width,
+            height: Self.headerHeight - 4
+        )
     }
 }

@@ -114,6 +114,11 @@ public class PopupWindow: NSWindow, NSWindowDelegate {
         self.setIsVisible(false)
         self.delegate = self
     }
+
+    public func setView(_ view: Popup_p?) {
+        self.viewController.setup(title: self.title, view: view)
+        self.setContentSize(self.viewController.view.frame.size)
+    }
     
     public func windowWillMove(_ notification: Notification) {
         self.viewController.setCloseButton(true)
