@@ -17,7 +17,7 @@ helper.run()
 
 class Helper: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private let listener: NSXPCListener
-    private let smcQueue = DispatchQueue(label: "com.tovam.StatsCompact.SMC.Helper.smcQueue")
+    private let smcQueue = DispatchQueue(label: "eu.exelban.Stats.SMC.Helper.smcQueue")
     
     private var connections = [NSXPCConnection]()
     private var shouldQuit = false

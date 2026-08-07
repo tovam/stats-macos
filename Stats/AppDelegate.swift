@@ -44,7 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     internal var supportWindow: SupportWindow?
     
     internal var menuBarItem: NSStatusItem? = nil
-    internal var combinedView: CombinedView = CombinedView()
+    internal var combinedView: CompactCombinedView = CompactCombinedView()
     internal var modulesMounted: Bool = false
     
     internal let updateActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.updateCheck")

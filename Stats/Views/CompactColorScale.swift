@@ -7,6 +7,9 @@ import Cocoa
 import Kit
 
 internal extension Notification.Name {
+    static let compactCPUUsage = Notification.Name("compactCPUUsage")
+    static let compactRAMUsage = Notification.Name("compactRAMUsage")
+    static let compactDiskFree = Notification.Name("compactDiskFree")
     static let compactColorScaleChanged = Notification.Name("compactColorScaleChanged")
 }
 
@@ -225,6 +228,486 @@ internal final class CompactColorAnimator {
         if self.animations.isEmpty {
             self.timer?.invalidate()
             self.timer = nil
+        }
+    }
+}
+
+internal final class CompactCombinedBridge: NSObject {
+    private weak var view: CompactSystemView?
+
+    init(view: CompactSystemView) {
+        self.view = view
+        super.init()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForCPUUsage),
+            name: .compactCPUUsage,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForRAMUsage),
+            name: .compactRAMUsage,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForDiskFree),
+            name: .compactDiskFree,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForColorScaleChange),
+            name: .compactColorScaleChanged,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func listenForCPUUsage(_ notification: Notification) {
+        guard let value = notification.object as? Double else { return }
+        self.view?.setCPU(value)
+    }
+
+    @objc private func listenForRAMUsage(_ notification: Notification) {
+        guard let value = notification.object as? [String: Double],
+              let usage = value["usage"], let swap = value["swap"] else { return }
+        self.view?.setRAM(usage, swap: swap)
+    }
+
+    @objc private func listenForDiskFree(_ notification: Notification) {
+        guard let value = notification.object as? Int64 else { return }
+        self.view?.setDiskFree(value)
+    }
+
+    @objc private func listenForColorScaleChange() {
+        self.view?.refreshColors()
+    }
+}
+
+internal final class CompactSystemView: NSView {
+    internal var widthCallback: ((CGFloat) -> Void)?
+
+    private let horizontalPadding: CGFloat = 4
+    private let baseColumnSpacing: CGFloat = 7
+    private let labelValueSpacing: CGFloat = 2
+    private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let colorAnimator = CompactColorAnimator()
+    private let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.usesSignificantDigits = true
+        formatter.minimumSignificantDigits = 2
+        formatter.maximumSignificantDigits = 2
+        return formatter
+    }()
+    private let smallGigabytesFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+
+    private var cpu: Double?
+    private var ram: Double?
+    private var diskFree: Int64?
+    private var swap: Double?
+    private var firstLabelWidth: CGFloat = 0
+    private var firstValueWidth: CGFloat = 0
+    private var secondLabelWidth: CGFloat = 0
+    private var secondValueWidth: CGFloat = 0
+    private var firstColumnWidth: CGFloat = 0
+
+    private var configuredSpacing: CGFloat {
+        CGFloat(Int(Store.shared.string(key: "CombinedModules_spacing", defaultValue: "none")) ?? 0)
+    }
+    private var separator: Bool {
+        Store.shared.bool(key: "CombinedModules_separator", defaultValue: false)
+    }
+    private var columnSpacing: CGFloat {
+        if self.separator {
+            return self.baseColumnSpacing + (self.configuredSpacing * 2) + 4
+        }
+        return self.baseColumnSpacing + self.configuredSpacing
+    }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
+        self.colorAnimator.onUpdate = { [weak self] in
+            self?.needsDisplay = true
+        }
+        self.recalculateWidth()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    internal func setCPU(_ value: Double) {
+        DispatchQueue.main.async {
+            self.cpu = value
+            self.updateColor(.cpu)
+            self.refresh()
+        }
+    }
+
+    internal func setRAM(_ value: Double, swap: Double) {
+        DispatchQueue.main.async {
+            self.ram = value
+            self.swap = swap
+            self.updateColor(.ram)
+            self.updateColor(.swap)
+            self.refresh()
+        }
+    }
+
+    internal func setDiskFree(_ value: Int64) {
+        DispatchQueue.main.async {
+            self.diskFree = value
+            self.updateColor(.free)
+            self.refresh()
+        }
+    }
+
+    internal func refreshColors() {
+        DispatchQueue.main.async {
+            CompactMetric.allCases.forEach(self.updateColor)
+        }
+    }
+
+    internal func recalculateWidth() {
+        self.firstLabelWidth = max(self.width(of: self.cpuLabel), self.width(of: self.ramLabel))
+        self.firstValueWidth = max(self.width(of: self.cpuValue), self.width(of: self.ramValue))
+        self.secondLabelWidth = max(self.width(of: self.diskFreeLabel), self.width(of: self.swapLabel))
+        self.secondValueWidth = max(self.width(of: self.diskFreeValue), self.width(of: self.swapValue))
+
+        let first = self.firstLabelWidth + self.labelValueSpacing + self.firstValueWidth
+        let second = self.secondLabelWidth + self.labelValueSpacing + self.secondValueWidth
+        self.firstColumnWidth = first
+
+        let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second
+        self.setFrameSize(NSSize(width: width, height: Constants.Widget.height))
+        self.widthCallback?(width)
+        self.needsDisplay = true
+    }
+
+    internal func openModule(at point: NSPoint, window: NSWindow, modules: [Module]) {
+        let moduleName = self.module(at: point)
+        guard let module = modules.first(where: { $0.name == moduleName }) else { return }
+
+        var userInfo: [String: Any] = [
+            "module": module.name,
+            "origin": window.frame.origin,
+            "center": window.frame.width / 2
+        ]
+        if let widget = module.menuBar.activeWidgets.first {
+            userInfo["widget"] = widget.type
+        }
+        NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: userInfo)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let firstX = self.horizontalPadding
+        let secondX = firstX + self.firstColumnWidth + self.columnSpacing
+        if self.separator {
+            let separatorX = firstX + self.firstColumnWidth + (self.columnSpacing / 2)
+            NSColor.textColor.withAlphaComponent(0.35).setFill()
+            NSBezierPath.fill(NSRect(x: separatorX.rounded(.down), y: 3, width: 1, height: self.bounds.height - 6))
+        }
+
+        self.draw(label: self.cpuLabel, value: self.cpuValue, metric: .cpu, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
+        self.draw(label: self.ramLabel, value: self.ramValue, metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
+        self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
+        self.draw(label: self.swapLabel, value: self.swapValue, metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
+    }
+
+    private func refresh() {
+        self.recalculateWidth()
+        self.needsDisplay = true
+    }
+
+    private func module(at point: NSPoint) -> String {
+        let firstColumnMaxX = self.horizontalPadding + self.firstColumnWidth + (self.columnSpacing / 2)
+        if point.x <= firstColumnMaxX {
+            return point.y >= self.bounds.midY ? "CPU" : "RAM"
+        }
+        return point.y >= self.bounds.midY ? "Disk" : "RAM"
+    }
+
+    private func draw(
+        label: String,
+        value: String,
+        metric: CompactMetric,
+        x: CGFloat,
+        labelWidth: CGFloat,
+        valueWidth: CGFloat,
+        top: Bool
+    ) {
+        let rowHeight = self.bounds.height / 2
+        let labelRect = NSRect(
+            x: x,
+            y: top ? rowHeight + 1 : 1,
+            width: labelWidth,
+            height: rowHeight
+        )
+        let valueRect = NSRect(
+            x: x + labelWidth + self.labelValueSpacing,
+            y: labelRect.origin.y,
+            width: valueWidth,
+            height: rowHeight
+        )
+        self.draw(label, in: labelRect, alignment: .center, color: NSColor.textColor.withAlphaComponent(0.7))
+        self.draw(value, in: valueRect, alignment: .right, color: self.colorAnimator.color(for: metric))
+    }
+
+    private func draw(_ text: String, in rect: NSRect, alignment: NSTextAlignment, color: NSColor) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = alignment
+        NSAttributedString(string: text, attributes: [
+            .font: self.font,
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle
+        ]).draw(with: rect)
+    }
+
+    private func width(of text: String) -> CGFloat {
+        text.widthOfString(usingFont: self.font).rounded(.up) + 1
+    }
+
+    private var cpuLabel: String { "C" }
+    private var ramLabel: String { "R" }
+    private var diskFreeLabel: String { "Fr" }
+    private var swapLabel: String { "Sw" }
+
+    private func updateColor(_ metric: CompactMetric) {
+        let value: Double?
+        switch metric {
+        case .cpu:
+            value = self.cpu.map { $0 * 100 }
+        case .ram:
+            value = self.ram.map { $0 * 100 }
+        case .free:
+            value = self.diskFree.map { Double($0) / 1_073_741_824 }
+        case .swap:
+            value = self.swap.map { $0 / 1_073_741_824 }
+        }
+        guard let value else { return }
+        let color = CompactColorScaleStore.shared.scale(for: metric).color(for: value)
+        self.colorAnimator.setTarget(color, for: metric)
+    }
+
+    private var cpuValue: String {
+        guard let value = self.cpu else { return "-- %" }
+        return "\(self.percentage(value)) %"
+    }
+
+    private var ramValue: String {
+        guard let value = self.ram else { return "-- %" }
+        return "\(self.percentage(value)) %"
+    }
+
+    private var diskFreeValue: String {
+        guard let value = self.diskFree else { return "-- GB" }
+        return "\(self.gigabytes(Double(value))) GB"
+    }
+
+    private var swapValue: String {
+        guard let value = self.swap else { return "-- GB" }
+        return "\(self.gigabytes(value)) GB"
+    }
+
+    private func significant(_ value: Double) -> String {
+        self.numberFormatter.string(from: NSNumber(value: max(0, value))) ?? "0"
+    }
+
+    private func percentage(_ value: Double) -> String {
+        self.significant(min(100, max(0, value * 100)))
+    }
+
+    private func gigabytes(_ bytes: Double) -> String {
+        let value = max(0, bytes / 1_073_741_824)
+        if (value * 10).rounded() / 10 < 10 {
+            return self.smallGigabytesFormatter.string(from: NSNumber(value: value)) ?? "0.0"
+        }
+        return self.significant(value)
+    }
+}
+
+internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate {
+    private var menuBarItem: NSStatusItem?
+    private let view = CompactSystemView()
+    private var popup: PopupWindow?
+    private var bridge: CompactCombinedBridge?
+
+    private var status: Bool {
+        Store.shared.bool(key: "CombinedModules", defaultValue: true)
+    }
+    private var activeModules: [Module] {
+        modules.filter({ $0.enabled }).sorted(by: { $0.combinedPosition < $1.combinedPosition })
+    }
+    private var combinedModulesPopup: Bool {
+        Store.shared.bool(key: "CombinedModules_popup", defaultValue: true)
+    }
+
+    override init() {
+        super.init()
+
+        self.bridge = CompactCombinedBridge(view: self.view)
+
+        modules.forEach { module in
+            module.menuBar.callback = { [weak self] in
+                if let status = self?.status, status {
+                    DispatchQueue.main.async {
+                        self?.recalculate()
+                    }
+                }
+            }
+        }
+
+        self.popup = PopupWindow(
+            title: "Combined modules",
+            module: .combined,
+            view: CompactCombinedPopup()
+        ) { _ in }
+        self.view.widthCallback = { [weak self] width in
+            self?.menuBarItem?.length = width
+        }
+
+        if self.status {
+            self.enable()
+        }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForOneView),
+            name: .toggleOneView,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForModuleRearrange),
+            name: .moduleRearrange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.listenForApplicationDidFinishLaunching),
+            name: NSApplication.didFinishLaunchingNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    internal func enable() {
+        self.menuBarItem = NSStatusBar.system.statusItem(withLength: 0)
+        DispatchQueue.main.async {
+            self.menuBarItem?.autosaveName = "CombinedModules"
+        }
+        self.menuBarItem?.button?.addSubview(self.view)
+        self.menuBarItem?.button?.image = NSImage()
+        self.menuBarItem?.button?.toolTip = localizedString("Combined modules")
+
+        self.menuBarItem?.button?.target = self
+        self.menuBarItem?.button?.action = #selector(self.handleClick)
+        self.menuBarItem?.button?.sendAction(on: [.leftMouseDown, .rightMouseDown])
+
+        DispatchQueue.main.async {
+            self.recalculate()
+        }
+    }
+
+    internal func disable() {
+        if let item = self.menuBarItem {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        self.menuBarItem = nil
+    }
+
+    private func recalculate() {
+        self.view.recalculateWidth()
+    }
+
+    @objc private func handleClick() {
+        if self.combinedModulesPopup {
+            self.togglePopup()
+        } else {
+            self.openModulePopup()
+        }
+    }
+
+    private func openModulePopup() {
+        guard let window = self.menuBarItem?.button?.window else { return }
+        let location = self.view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        self.view.openModule(at: location, window: window, modules: self.activeModules)
+    }
+
+    private func togglePopup() {
+        guard let popup = self.popup,
+              let item = self.menuBarItem,
+              let window = item.button?.window else { return }
+        NSApplication.shared.windows.filter({ $0 is NSPanel }).forEach { $0.setIsVisible(false) }
+
+        if popup.occlusionState.rawValue == 8192 {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            popup.contentView?.invalidateIntrinsicContentSize()
+
+            let windowCenter = popup.contentView!.intrinsicContentSize.width / 2
+            var x = window.frame.origin.x - windowCenter + (window.frame.width / 2)
+            let y = window.frame.origin.y - popup.contentView!.intrinsicContentSize.height - 3
+
+            let buttonPoint = NSPoint(x: window.frame.midX, y: window.frame.midY)
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(buttonPoint) }) ?? NSScreen.main {
+                if x + popup.contentView!.intrinsicContentSize.width > screen.frame.maxX {
+                    x = screen.frame.maxX - popup.contentView!.intrinsicContentSize.width - 3
+                }
+                if x < screen.frame.minX {
+                    x = screen.frame.minX + 3
+                }
+            }
+
+            popup.setFrameOrigin(NSPoint(x: x, y: y))
+            popup.setIsVisible(true)
+        } else {
+            popup.setIsVisible(false)
+        }
+    }
+
+    @objc private func listenForOneView(_ notification: Notification) {
+        guard notification.userInfo?["module"] == nil else { return }
+        if self.status {
+            self.enable()
+        } else {
+            self.disable()
+        }
+    }
+
+    @objc private func listenForModuleRearrange() {
+        self.recalculate()
+    }
+
+    @objc private func listenForApplicationDidFinishLaunching() {
+        // parseVersion can reset the store during the same launch notification.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if !Store.shared.exist(key: "CombinedModules") {
+                Store.shared.set(key: "CombinedModules", value: true)
+            }
+            if self.status && self.menuBarItem == nil {
+                self.enable()
+            }
         }
     }
 }

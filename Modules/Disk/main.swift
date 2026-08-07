@@ -312,7 +312,7 @@ public class Disk: Module {
             return
         }
 
-        NotificationCenter.default.post(name: .compactDiskFree, object: d.free)
+        NotificationCenter.default.post(name: Notification.Name("compactDiskFree"), object: d.free)
         
         self.portalView.utilizationCallback(d)
         self.notificationsView.utilizationCallback(d.percentage)
