@@ -6,16 +6,19 @@
 import Cocoa
 import Kit
 
-internal final class CompactColorSettingsView: PreferencesSection {
+internal final class CompactColorSettingsView: NSStackView {
     init() {
+        super.init(frame: .zero)
+        self.orientation = .vertical
+
         let rows = CompactMetric.allCases.map { metric in
             PreferencesRow(metric.title, "Displayed in \(metric.unit)", component: CompactScaleEditorView(metric: metric))
         }
-        super.init(
+        self.addArrangedSubview(PreferencesSection(
             title: "Compact colors",
             subtitle: "White → yellow → orange → red → violet",
             rows
-        )
+        ))
     }
 
     required init?(coder: NSCoder) {
