@@ -189,6 +189,7 @@ private class CompactSystemView: NSView {
 
     private let horizontalPadding: CGFloat = 4
     private let columnSpacing: CGFloat = 7
+    private let labelValueSpacing: CGFloat = 2
     private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -212,6 +213,10 @@ private class CompactSystemView: NSView {
     private var ram: Double?
     private var diskFree: Int64?
     private var swap: Double?
+    private var firstLabelWidth: CGFloat = 0
+    private var firstValueWidth: CGFloat = 0
+    private var secondLabelWidth: CGFloat = 0
+    private var secondValueWidth: CGFloat = 0
     private var firstColumnWidth: CGFloat = 0
 
     init() {
@@ -246,8 +251,13 @@ private class CompactSystemView: NSView {
     }
 
     fileprivate func recalculateWidth() {
-        let first = max(self.width(of: self.cpuText), self.width(of: self.ramText))
-        let second = max(self.width(of: self.diskFreeText), self.width(of: self.swapText))
+        self.firstLabelWidth = max(self.width(of: self.cpuLabel), self.width(of: self.ramLabel))
+        self.firstValueWidth = max(self.width(of: self.cpuValue), self.width(of: self.ramValue))
+        self.secondLabelWidth = max(self.width(of: self.diskFreeLabel), self.width(of: self.swapLabel))
+        self.secondValueWidth = max(self.width(of: self.diskFreeValue), self.width(of: self.swapValue))
+
+        let first = self.firstLabelWidth + self.labelValueSpacing + self.firstValueWidth
+        let second = self.secondLabelWidth + self.labelValueSpacing + self.secondValueWidth
         self.firstColumnWidth = first
 
         let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second
@@ -268,10 +278,10 @@ private class CompactSystemView: NSView {
 
         let firstX = self.horizontalPadding
         let secondX = firstX + self.firstColumnWidth + self.columnSpacing
-        self.draw(self.cpuText, x: firstX, top: true)
-        self.draw(self.ramText, x: firstX, top: false)
-        self.draw(self.diskFreeText, x: secondX, top: true)
-        self.draw(self.swapText, x: secondX, top: false)
+        self.draw(label: self.cpuLabel, value: self.cpuValue, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
+        self.draw(label: self.ramLabel, value: self.ramValue, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
+        self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
+        self.draw(label: self.swapLabel, value: self.swapValue, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
     }
 
     private func refresh() {
@@ -279,17 +289,31 @@ private class CompactSystemView: NSView {
         self.needsDisplay = true
     }
 
-    private func draw(_ text: String, x: CGFloat, top: Bool) {
+    private func draw(label: String, value: String, x: CGFloat, labelWidth: CGFloat, valueWidth: CGFloat, top: Bool) {
         let rowHeight = self.bounds.height / 2
-        let rect = NSRect(
+        let labelRect = NSRect(
             x: x,
             y: top ? rowHeight + 1 : 1,
-            width: self.width(of: text) + 1,
+            width: labelWidth,
             height: rowHeight
         )
+        let valueRect = NSRect(
+            x: x + labelWidth + self.labelValueSpacing,
+            y: labelRect.origin.y,
+            width: valueWidth,
+            height: rowHeight
+        )
+        self.draw(label, in: labelRect, alignment: .center)
+        self.draw(value, in: valueRect, alignment: .right)
+    }
+
+    private func draw(_ text: String, in rect: NSRect, alignment: NSTextAlignment) {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = alignment
         NSAttributedString(string: text, attributes: [
             .font: self.font,
-            .foregroundColor: NSColor.textColor
+            .foregroundColor: NSColor.textColor,
+            .paragraphStyle: paragraphStyle
         ]).draw(with: rect)
     }
 
@@ -297,24 +321,29 @@ private class CompactSystemView: NSView {
         text.widthOfString(usingFont: self.font).rounded(.up) + 1
     }
 
-    private var cpuText: String {
-        guard let value = self.cpu else { return "C --%" }
-        return "C \(self.percentage(value))%"
+    private var cpuLabel: String { "C" }
+    private var ramLabel: String { "R" }
+    private var diskFreeLabel: String { "Fr" }
+    private var swapLabel: String { "Sw" }
+
+    private var cpuValue: String {
+        guard let value = self.cpu else { return "-- %" }
+        return "\(self.percentage(value)) %"
     }
 
-    private var ramText: String {
-        guard let value = self.ram else { return "R --%" }
-        return "R \(self.percentage(value))%"
+    private var ramValue: String {
+        guard let value = self.ram else { return "-- %" }
+        return "\(self.percentage(value)) %"
     }
 
-    private var diskFreeText: String {
-        guard let value = self.diskFree else { return "Fr -- GB" }
-        return "Fr \(self.gigabytes(Double(value))) GB"
+    private var diskFreeValue: String {
+        guard let value = self.diskFree else { return "-- GB" }
+        return "\(self.gigabytes(Double(value))) GB"
     }
 
-    private var swapText: String {
-        guard let value = self.swap else { return "Sw -- GB" }
-        return "Sw \(self.gigabytes(value)) GB"
+    private var swapValue: String {
+        guard let value = self.swap else { return "-- GB" }
+        return "\(self.gigabytes(value)) GB"
     }
 
     private func significant(_ value: Double) -> String {
