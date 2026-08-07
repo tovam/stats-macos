@@ -297,6 +297,7 @@ internal final class CompactSystemView: NSView {
     private let baseColumnSpacing: CGFloat = 7
     private let labelValueSpacing: CGFloat = 2
     private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let bytesPerGibibyte: Double = 1_073_741_824
     private let colorAnimator = CompactColorAnimator()
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -497,9 +498,9 @@ internal final class CompactSystemView: NSView {
         case .ram:
             value = self.ram.map { $0 * 100 }
         case .free:
-            value = self.diskFree.map { Double($0) / 1_073_741_824 }
+            value = self.diskFree.map { DiskSize($0).gigabytes }
         case .swap:
-            value = self.swap.map { $0 / 1_073_741_824 }
+            value = self.swap.map { $0 / self.bytesPerGibibyte }
         }
         guard let value else { return }
         let color = CompactColorScaleStore.shared.scale(for: metric).color(for: value)
@@ -518,12 +519,12 @@ internal final class CompactSystemView: NSView {
 
     private var diskFreeValue: String {
         guard let value = self.diskFree else { return "-- GB" }
-        return "\(self.gigabytes(Double(value))) GB"
+        return "\(self.formatGigabytes(DiskSize(value).gigabytes)) GB"
     }
 
     private var swapValue: String {
         guard let value = self.swap else { return "-- GB" }
-        return "\(self.gigabytes(value)) GB"
+        return "\(self.formatGigabytes(value / self.bytesPerGibibyte)) GB"
     }
 
     private func significant(_ value: Double) -> String {
@@ -534,8 +535,8 @@ internal final class CompactSystemView: NSView {
         self.significant(min(100, max(0, value * 100)))
     }
 
-    private func gigabytes(_ bytes: Double) -> String {
-        let value = max(0, bytes / 1_073_741_824)
+    private func formatGigabytes(_ gigabytes: Double) -> String {
+        let value = max(0, gigabytes)
         if (value * 10).rounded() / 10 < 10 {
             return self.smallGigabytesFormatter.string(from: NSNumber(value: value)) ?? "0.0"
         }
