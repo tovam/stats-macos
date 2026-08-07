@@ -118,7 +118,7 @@ private final class CompactScaleEditorView: NSStackView, NSTextFieldDelegate {
 
         self.mode.controlSize = .small
         self.mode.target = self
-        self.mode.action = #selector(self.changeMode)
+        self.mode.action = #selector(self.selectScaleMode)
 
         let valueLabel = NSTextField(labelWithString: "Handle")
         valueLabel.font = NSFont.systemFont(ofSize: 10)
@@ -226,7 +226,7 @@ private final class CompactScaleEditorView: NSStackView, NSTextFieldDelegate {
         self.save()
     }
 
-    @objc private func changeMode() {
+    @objc private func selectScaleMode() {
         guard CompactScaleMode.allCases.indices.contains(self.mode.selectedSegment) else { return }
         self.configuration.mode = CompactScaleMode.allCases[self.mode.selectedSegment]
         self.gradient.setConfiguration(self.configuration)
