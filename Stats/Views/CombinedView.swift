@@ -58,6 +58,7 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(listenForCPUUsage), name: .compactCPUUsage, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(listenForRAMUsage), name: .compactRAMUsage, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(listenForDiskFree), name: .compactDiskFree, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(listenForColorScaleChange), name: .compactColorScaleChanged, object: nil)
     }
     
     deinit {
@@ -182,6 +183,10 @@ internal class CombinedView: NSObject, NSGestureRecognizerDelegate {
         guard let value = notification.object as? Int64 else { return }
         self.view.setDiskFree(value)
     }
+
+    @objc private func listenForColorScaleChange() {
+        self.view.refreshColors()
+    }
 }
 
 private class CompactSystemView: NSView {
@@ -191,6 +196,7 @@ private class CompactSystemView: NSView {
     private let columnSpacing: CGFloat = 7
     private let labelValueSpacing: CGFloat = 2
     private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let colorAnimator = CompactColorAnimator()
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -221,6 +227,9 @@ private class CompactSystemView: NSView {
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
+        self.colorAnimator.onUpdate = { [weak self] in
+            self?.needsDisplay = true
+        }
         self.recalculateWidth()
     }
 
@@ -231,6 +240,7 @@ private class CompactSystemView: NSView {
     fileprivate func setCPU(_ value: Double) {
         DispatchQueue.main.async {
             self.cpu = value
+            self.updateColor(.cpu)
             self.refresh()
         }
     }
@@ -239,6 +249,8 @@ private class CompactSystemView: NSView {
         DispatchQueue.main.async {
             self.ram = value
             self.swap = swap
+            self.updateColor(.ram)
+            self.updateColor(.swap)
             self.refresh()
         }
     }
@@ -246,7 +258,14 @@ private class CompactSystemView: NSView {
     fileprivate func setDiskFree(_ value: Int64) {
         DispatchQueue.main.async {
             self.diskFree = value
+            self.updateColor(.free)
             self.refresh()
+        }
+    }
+
+    fileprivate func refreshColors() {
+        DispatchQueue.main.async {
+            CompactMetric.allCases.forEach(self.updateColor)
         }
     }
 
@@ -278,10 +297,10 @@ private class CompactSystemView: NSView {
 
         let firstX = self.horizontalPadding
         let secondX = firstX + self.firstColumnWidth + self.columnSpacing
-        self.draw(label: self.cpuLabel, value: self.cpuValue, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
-        self.draw(label: self.ramLabel, value: self.ramValue, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
-        self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
-        self.draw(label: self.swapLabel, value: self.swapValue, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
+        self.draw(label: self.cpuLabel, value: self.cpuValue, metric: .cpu, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
+        self.draw(label: self.ramLabel, value: self.ramValue, metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
+        self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
+        self.draw(label: self.swapLabel, value: self.swapValue, metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
     }
 
     private func refresh() {
@@ -289,7 +308,7 @@ private class CompactSystemView: NSView {
         self.needsDisplay = true
     }
 
-    private func draw(label: String, value: String, x: CGFloat, labelWidth: CGFloat, valueWidth: CGFloat, top: Bool) {
+    private func draw(label: String, value: String, metric: CompactMetric, x: CGFloat, labelWidth: CGFloat, valueWidth: CGFloat, top: Bool) {
         let rowHeight = self.bounds.height / 2
         let labelRect = NSRect(
             x: x,
@@ -303,16 +322,16 @@ private class CompactSystemView: NSView {
             width: valueWidth,
             height: rowHeight
         )
-        self.draw(label, in: labelRect, alignment: .center)
-        self.draw(value, in: valueRect, alignment: .right)
+        self.draw(label, in: labelRect, alignment: .center, color: NSColor.textColor.withAlphaComponent(0.7))
+        self.draw(value, in: valueRect, alignment: .right, color: self.colorAnimator.color(for: metric))
     }
 
-    private func draw(_ text: String, in rect: NSRect, alignment: NSTextAlignment) {
+    private func draw(_ text: String, in rect: NSRect, alignment: NSTextAlignment, color: NSColor) {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = alignment
         NSAttributedString(string: text, attributes: [
             .font: self.font,
-            .foregroundColor: NSColor.textColor,
+            .foregroundColor: color,
             .paragraphStyle: paragraphStyle
         ]).draw(with: rect)
     }
@@ -325,6 +344,23 @@ private class CompactSystemView: NSView {
     private var ramLabel: String { "R" }
     private var diskFreeLabel: String { "Fr" }
     private var swapLabel: String { "Sw" }
+
+    private func updateColor(_ metric: CompactMetric) {
+        let value: Double?
+        switch metric {
+        case .cpu:
+            value = self.cpu.map { $0 * 100 }
+        case .ram:
+            value = self.ram.map { $0 * 100 }
+        case .free:
+            value = self.diskFree.map { Double($0) / 1_073_741_824 }
+        case .swap:
+            value = self.swap.map { $0 / 1_073_741_824 }
+        }
+        guard let value else { return }
+        let color = CompactColorScaleStore.shared.scale(for: metric).color(for: value)
+        self.colorAnimator.setTarget(color, for: metric)
+    }
 
     private var cpuValue: String {
         guard let value = self.cpu else { return "-- %" }

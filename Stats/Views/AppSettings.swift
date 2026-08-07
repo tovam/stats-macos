@@ -128,6 +128,7 @@ class ApplicationSettings: NSStackView {
             ))
         ])
         scrollView.stackView.addArrangedSubview(self.combinedModulesView!)
+        scrollView.stackView.addArrangedSubview(CompactColorSettingsView())
         self.combinedModulesView?.setRowVisibility(1, newState: self.combinedModulesState)
         self.combinedModulesView?.setRowVisibility(2, newState: self.combinedModulesState)
         
