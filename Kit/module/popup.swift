@@ -233,6 +233,7 @@ internal class PopupView: NSView {
         self.body.horizontalScrollElasticity = .none
         
         self.addSubview(self.foreground, positioned: .below, relativeTo: .none)
+        self.header.autoresizingMask = [.width]
         self.addSubview(self.header)
         self.addSubview(self.body)
     }
@@ -271,7 +272,6 @@ internal class PopupView: NSView {
             width: size.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: size.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
-        self.header.setFrameSize(NSSize(width: size.width, height: self.header.frame.height))
         self.header.setFrameOrigin(NSPoint(x: 0, y: size.height - Constants.Popup.headerHeight))
         
         if let view = view {
@@ -336,7 +336,6 @@ internal class PopupView: NSView {
             width: windowSize.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: windowSize.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
-        self.header.setFrameSize(NSSize(width: windowSize.width, height: self.header.frame.height))
         self.header.setFrameOrigin(NSPoint(
             x: self.header.frame.origin.x,
             y: self.body.frame.height + (Constants.Popup.margins*2)
@@ -419,7 +418,8 @@ internal class HeaderView: NSStackView {
         
         NSLayoutConstraint.activate([
             title.widthAnchor.constraint(
-                equalToConstant: self.frame.width - activity.intrinsicContentSize.width - settings.intrinsicContentSize.width
+                equalTo: self.widthAnchor,
+                constant: -activity.intrinsicContentSize.width - settings.intrinsicContentSize.width
             )
         ])
     }
