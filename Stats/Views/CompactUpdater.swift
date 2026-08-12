@@ -22,6 +22,19 @@ internal struct CompactForkRelease: Equatable {
     let publishedAt: Int
 }
 
+internal struct CompactWeeklyWorkflow: Equatable {
+    let id: Int
+    let status: String
+    let conclusion: String?
+    let pageURL: String
+    let startedAt: Int
+
+    var failed: Bool {
+        guard self.status == "completed", let conclusion else { return false }
+        return conclusion != "success" && conclusion != "neutral" && conclusion != "skipped"
+    }
+}
+
 internal struct CompactUpdateSnapshot {
     let needsAttention: Bool
     let color: NSColor
@@ -34,12 +47,12 @@ internal final class CompactUpdateMonitor {
 
     let subtleNotificationsOnly = true
 
-    private let staleInterval: TimeInterval = 8 * 24 * 60 * 60
     private let lock = NSLock()
     private var timer: Timer?
     private var lastSuccessValue: Int
     private var lastErrorValue: String
     private var releaseValue: CompactForkRelease?
+    private var workflowValue: CompactWeeklyWorkflow?
 
     private var currentTag: String? {
         Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String
@@ -66,6 +79,21 @@ internal final class CompactUpdateMonitor {
                 publishedAt: publishedAt
             )
         }
+
+        let workflowID = Store.shared.int(key: "compact_update_workflow_id", defaultValue: 0)
+        let workflowStatus = Store.shared.string(key: "compact_update_workflow_status", defaultValue: "")
+        let workflowConclusion = Store.shared.string(key: "compact_update_workflow_conclusion", defaultValue: "")
+        let workflowPage = Store.shared.string(key: "compact_update_workflow_page", defaultValue: "")
+        let workflowStartedAt = Store.shared.int(key: "compact_update_workflow_started", defaultValue: 0)
+        if workflowID > 0, !workflowStatus.isEmpty, !workflowPage.isEmpty, workflowStartedAt > 0 {
+            self.workflowValue = CompactWeeklyWorkflow(
+                id: workflowID,
+                status: workflowStatus,
+                conclusion: workflowConclusion.isEmpty ? nil : workflowConclusion,
+                pageURL: workflowPage,
+                startedAt: workflowStartedAt
+            )
+        }
     }
 
     var latestRelease: CompactForkRelease? {
@@ -76,53 +104,46 @@ internal final class CompactUpdateMonitor {
         self.snapshot.needsAttention
     }
 
+    var hasAvailableUpdate: Bool {
+        self.lock.withLock {
+            self.releaseValue.map { $0.tag != self.currentTag } ?? false
+        }
+    }
+
     var snapshot: CompactUpdateSnapshot {
         self.lock.withLock {
             let release = self.releaseValue
+            let workflow = self.workflowValue
             let lastSuccess = self.lastSuccessValue
             let lastError = self.lastErrorValue
             let now = Int(Date().timeIntervalSince1970)
             let age = lastSuccess == 0 ? Int.max : max(0, now - lastSuccess)
             let available = release.map { $0.tag != self.currentTag } ?? false
-            let stale = age >= Int(self.staleInterval)
-            let releaseAge = release.map { max(0, now - $0.publishedAt) }
-            let releaseIsStale = releaseAge.map { $0 >= Int(self.staleInterval) } ?? false
+
+            if let workflow, workflow.failed {
+                return CompactUpdateSnapshot(
+                    needsAttention: true,
+                    color: .systemRed,
+                    message: "Weekly build failed",
+                    details: "The Monday workflow failed \(self.relativeAge(max(0, now - workflow.startedAt))).\n\(workflow.pageURL)"
+                )
+            }
 
             if available, let release {
                 return CompactUpdateSnapshot(
                     needsAttention: true,
-                    color: .systemRed,
+                    color: .systemGreen,
                     message: "Update available · \(release.tag)",
-                    details: "The latest public release of tovam/stats-macos is ready."
+                    details: "The public release is ready. Open Settings to install it.\n\(release.pageURL)"
                 )
             }
 
             if lastSuccess == 0 {
                 return CompactUpdateSnapshot(
-                    needsAttention: true,
-                    color: .systemRed,
+                    needsAttention: false,
+                    color: .secondaryLabelColor,
                     message: "Update status has not been checked yet",
                     details: lastError.isEmpty ? "Waiting for the first successful check." : lastError
-                )
-            }
-
-            if stale {
-                return CompactUpdateSnapshot(
-                    needsAttention: true,
-                    color: .systemRed,
-                    message: "Update check overdue · \(self.relativeAge(age))",
-                    details: lastError.isEmpty
-                        ? "No successful fork update check for more than eight days."
-                        : lastError
-                )
-            }
-
-            if releaseIsStale, let releaseAge {
-                return CompactUpdateSnapshot(
-                    needsAttention: true,
-                    color: .systemRed,
-                    message: "Latest fork release · \(self.relativeAge(releaseAge))",
-                    details: "The weekly tovam/stats-macos release may need attention."
                 )
             }
 
@@ -144,6 +165,11 @@ internal final class CompactUpdateMonitor {
         }
     }
 
+    var indicatorColor: NSColor? {
+        let state = self.snapshot
+        return state.needsAttention ? state.color : nil
+    }
+
     func start() {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.timer == nil else { return }
@@ -156,22 +182,36 @@ internal final class CompactUpdateMonitor {
         }
     }
 
-    func recordSuccess(_ release: CompactForkRelease) {
+    func recordSuccess(
+        _ release: CompactForkRelease,
+        workflow: CompactWeeklyWorkflow?,
+        statusWarning: String? = nil
+    ) {
         let now = Int(Date().timeIntervalSince1970)
         self.lock.withLock {
             self.lastSuccessValue = now
-            self.lastErrorValue = ""
+            self.lastErrorValue = statusWarning ?? ""
             self.releaseValue = release
+            if let workflow {
+                self.workflowValue = workflow
+            }
         }
 
         Store.shared.set(key: "compact_update_last_success", value: now)
-        Store.shared.set(key: "compact_update_last_error", value: "")
+        Store.shared.set(key: "compact_update_last_error", value: statusWarning ?? "")
         Store.shared.set(key: "compact_update_latest_tag", value: release.tag)
         Store.shared.set(key: "compact_update_latest_sha", value: release.targetSHA)
         Store.shared.set(key: "compact_update_latest_asset", value: release.assetURL)
         Store.shared.set(key: "compact_update_latest_digest", value: release.assetDigest)
         Store.shared.set(key: "compact_update_latest_page", value: release.pageURL)
         Store.shared.set(key: "compact_update_latest_published", value: release.publishedAt)
+        if let workflow {
+            Store.shared.set(key: "compact_update_workflow_id", value: workflow.id)
+            Store.shared.set(key: "compact_update_workflow_status", value: workflow.status)
+            Store.shared.set(key: "compact_update_workflow_conclusion", value: workflow.conclusion ?? "")
+            Store.shared.set(key: "compact_update_workflow_page", value: workflow.pageURL)
+            Store.shared.set(key: "compact_update_workflow_started", value: workflow.startedAt)
+        }
         self.notify()
     }
 
@@ -180,6 +220,18 @@ internal final class CompactUpdateMonitor {
             self.lastErrorValue = message
         }
         Store.shared.set(key: "compact_update_last_error", value: message)
+        self.notify()
+    }
+
+    func recordWorkflow(_ workflow: CompactWeeklyWorkflow) {
+        self.lock.withLock {
+            self.workflowValue = workflow
+        }
+        Store.shared.set(key: "compact_update_workflow_id", value: workflow.id)
+        Store.shared.set(key: "compact_update_workflow_status", value: workflow.status)
+        Store.shared.set(key: "compact_update_workflow_conclusion", value: workflow.conclusion ?? "")
+        Store.shared.set(key: "compact_update_workflow_page", value: workflow.pageURL)
+        Store.shared.set(key: "compact_update_workflow_started", value: workflow.startedAt)
         self.notify()
     }
 
@@ -250,6 +302,36 @@ internal final class CompactUpdateStatusView: NSStackView {
     }
 }
 
+internal final class CompactUpdateActionButton: NSButton {
+    init(target: AnyObject?, action: Selector) {
+        super.init(frame: .zero)
+        self.bezelStyle = .rounded
+        self.target = target
+        self.action = action
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.updateState),
+            name: .compactUpdateStateChanged,
+            object: nil
+        )
+        self.updateState()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func updateState() {
+        self.title = CompactUpdateMonitor.shared.hasAvailableUpdate
+            ? "\(localizedString("Install"))…"
+            : localizedString("Check for update")
+    }
+}
+
 private final class CompactUpdateDotView: NSView {
     var color: NSColor = .secondaryLabelColor {
         didSet { self.needsDisplay = true }
@@ -293,11 +375,79 @@ internal final class CompactUpdater {
         }
     }
 
-    private let endpoint = URL(string: "https://api.github.com/repos/tovam/stats-macos/releases/latest")!
+    private struct GitHubWorkflowRuns: Decodable {
+        struct Run: Decodable {
+            let id: Int
+            let status: String
+            let conclusion: String?
+            let htmlURL: String
+            let runStartedAt: Date?
+            let createdAt: Date
+
+            enum CodingKeys: String, CodingKey {
+                case id, status, conclusion
+                case htmlURL = "html_url"
+                case runStartedAt = "run_started_at"
+                case createdAt = "created_at"
+            }
+        }
+
+        let workflowRuns: [Run]
+
+        enum CodingKeys: String, CodingKey {
+            case workflowRuns = "workflow_runs"
+        }
+    }
+
+    private let releaseEndpoint = URL(string: "https://api.github.com/repos/tovam/stats-macos/releases/latest")!
+    private let workflowEndpoint = URL(string: "https://api.github.com/repos/tovam/stats-macos/actions/workflows/sync-upstream.yaml/runs?event=schedule&per_page=1")!
     private let expectedLock = NSLock()
     private var expectedByURL: [String: CompactForkRelease] = [:]
     private var expectedByPath: [String: CompactForkRelease] = [:]
     private var observation: NSKeyValueObservation?
+    private var refreshTimer: Timer?
+
+    private final class CheckContext {
+        private let lock = NSLock()
+        private var release: CompactForkRelease?
+        private var workflow: CompactWeeklyWorkflow?
+        private var releaseError: Error?
+        private var workflowError: Error?
+        private var remaining = 2
+
+        func storeRelease(_ result: Result<CompactForkRelease, Error>) -> Bool {
+            self.lock.withLock {
+                switch result {
+                case .success(let release): self.release = release
+                case .failure(let error): self.releaseError = error
+                }
+                self.remaining -= 1
+                return self.remaining == 0
+            }
+        }
+
+        func storeWorkflow(_ result: Result<CompactWeeklyWorkflow?, Error>) -> Bool {
+            self.lock.withLock {
+                switch result {
+                case .success(let workflow): self.workflow = workflow
+                case .failure(let error): self.workflowError = error
+                }
+                self.remaining -= 1
+                return self.remaining == 0
+            }
+        }
+
+        func values() -> (
+            release: CompactForkRelease?,
+            workflow: CompactWeeklyWorkflow?,
+            releaseError: Error?,
+            workflowError: Error?
+        ) {
+            self.lock.withLock {
+                (self.release, self.workflow, self.releaseError, self.workflowError)
+            }
+        }
+    }
 
     private var currentTag: String? {
         Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String
@@ -318,10 +468,19 @@ internal final class CompactUpdater {
 
     init() {
         CompactUpdateMonitor.shared.start()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.refreshTimer == nil else { return }
+            let timer = Timer(timeInterval: 60 * 60, repeats: true) { [weak self] _ in
+                self?.check(force: true) { _, _ in }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.refreshTimer = timer
+        }
     }
 
     deinit {
         self.observation?.invalidate()
+        self.refreshTimer?.invalidate()
     }
 
     func check(force: Bool = false, completion: @escaping (version_s?, Error?) -> Void) {
@@ -337,7 +496,104 @@ internal final class CompactUpdater {
         }
         self.lastCheckTS = now
 
-        var request = URLRequest(url: self.endpoint)
+        let context = CheckContext()
+        let finish: () -> Void = { [weak self] in
+            guard let self else { return }
+            let values = context.values()
+
+            if let workflow = values.workflow, workflow.failed {
+                // A failed Monday run has priority even if no release was produced.
+                if let release = values.release {
+                    self.expectedLock.withLock { self.expectedByURL[release.assetURL] = release }
+                    CompactUpdateMonitor.shared.recordSuccess(release, workflow: workflow)
+                } else {
+                    CompactUpdateMonitor.shared.recordWorkflow(workflow)
+                }
+                completion(nil, self.error("The weekly build failed."))
+                return
+            }
+
+            guard let release = values.release else {
+                self.fail(
+                    values.releaseError?.localizedDescription ?? "Could not load the latest fork release.",
+                    completion: completion
+                )
+                return
+            }
+
+            self.expectedLock.withLock { self.expectedByURL[release.assetURL] = release }
+            let warning = values.workflowError.map {
+                "Could not check the weekly build: \($0.localizedDescription)"
+            } ?? (values.workflow == nil ? "GitHub returned no scheduled weekly workflow." : nil)
+            CompactUpdateMonitor.shared.recordSuccess(
+                release,
+                workflow: values.workflow,
+                statusWarning: warning
+            )
+            completion(self.version(from: release), nil)
+        }
+
+        self.fetchRelease { result in
+            if context.storeRelease(result) { finish() }
+        }
+        self.fetchWorkflow { result in
+            if context.storeWorkflow(result) { finish() }
+        }
+    }
+
+    private func fetchRelease(completion: @escaping (Result<CompactForkRelease, Error>) -> Void) {
+        self.fetch(self.releaseEndpoint) { [weak self] result in
+            guard let self else { return }
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let payload = try decoder.decode(GitHubRelease.self, from: result.get())
+                guard let asset = payload.assets.first(where: { $0.name == "Stats-Compact.app.zip" }),
+                      let digest = asset.digest,
+                      digest.hasPrefix("sha256:"),
+                      self.isAllowedDownloadURL(asset.browserDownloadURL) else {
+                    completion(.failure(self.error(
+                        "The latest release does not contain a valid Stats-Compact.app.zip asset."
+                    )))
+                    return
+                }
+                completion(.success(CompactForkRelease(
+                    tag: payload.tagName,
+                    targetSHA: payload.targetCommitish,
+                    assetURL: asset.browserDownloadURL,
+                    assetDigest: digest,
+                    pageURL: payload.htmlURL,
+                    publishedAt: Int(payload.publishedAt.timeIntervalSince1970)
+                )))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func fetchWorkflow(completion: @escaping (Result<CompactWeeklyWorkflow?, Error>) -> Void) {
+        self.fetch(self.workflowEndpoint) { result in
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let payload = try decoder.decode(GitHubWorkflowRuns.self, from: result.get())
+                completion(.success(payload.workflowRuns.first.map {
+                    CompactWeeklyWorkflow(
+                        id: $0.id,
+                        status: $0.status,
+                        conclusion: $0.conclusion,
+                        pageURL: $0.htmlURL,
+                        startedAt: Int(($0.runStartedAt ?? $0.createdAt).timeIntervalSince1970)
+                    )
+                }))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func fetch(_ url: URL, completion: @escaping (Result<Data, Error>) -> Void) {
+        var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 20
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -346,42 +602,14 @@ internal final class CompactUpdater {
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
             if let error {
-                self.fail(error.localizedDescription, completion: completion)
+                completion(.failure(error))
                 return
             }
             guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data else {
-                self.fail("GitHub returned an invalid response.", completion: completion)
+                completion(.failure(self.error("GitHub returned an invalid response.")))
                 return
             }
-
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                let payload = try decoder.decode(GitHubRelease.self, from: data)
-                guard let asset = payload.assets.first(where: { $0.name == "Stats-Compact.app.zip" }),
-                      let digest = asset.digest,
-                      digest.hasPrefix("sha256:"),
-                      self.isAllowedDownloadURL(asset.browserDownloadURL) else {
-                    self.fail("The latest release does not contain a valid Stats-Compact.app.zip asset.", completion: completion)
-                    return
-                }
-
-                let release = CompactForkRelease(
-                    tag: payload.tagName,
-                    targetSHA: payload.targetCommitish,
-                    assetURL: asset.browserDownloadURL,
-                    assetDigest: digest,
-                    pageURL: payload.htmlURL,
-                    publishedAt: Int(payload.publishedAt.timeIntervalSince1970)
-                )
-                self.expectedLock.withLock {
-                    self.expectedByURL[release.assetURL] = release
-                }
-                CompactUpdateMonitor.shared.recordSuccess(release)
-                completion(self.version(from: release), nil)
-            } catch {
-                self.fail("Could not parse the fork release: \(error.localizedDescription)", completion: completion)
-            }
+            completion(.success(data))
         }.resume()
     }
 

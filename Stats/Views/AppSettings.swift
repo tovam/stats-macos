@@ -290,11 +290,7 @@ class ApplicationSettings: NSStackView {
         let releaseTag = Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String ?? "unstamped"
         statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)\nFork release: \(releaseTag)"
         
-        let updateButton: NSButton = NSButton()
-        updateButton.title = localizedString("Check for update")
-        updateButton.bezelStyle = .rounded
-        updateButton.target = self
-        updateButton.action = #selector(self.updateAction)
+        let updateButton = CompactUpdateActionButton(target: self, action: #selector(self.updateAction))
         
         container.addRow(with: [iconView])
         container.addRow(with: [statsName])

@@ -566,8 +566,8 @@ internal final class CompactSystemView: NSView {
         self.draw(label: self.ramLabel, value: self.ramValue, metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
         self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
         self.draw(label: self.swapLabel, value: self.swapValue, metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
-        if CompactUpdateMonitor.shared.needsAttention {
-            NSColor.systemRed.setFill()
+        if let indicatorColor = CompactUpdateMonitor.shared.indicatorColor {
+            indicatorColor.setFill()
             NSBezierPath(ovalIn: NSRect(
                 x: self.bounds.maxX - 6,
                 y: (self.bounds.midY - 2.5).rounded(.down),
