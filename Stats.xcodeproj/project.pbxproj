@@ -3131,7 +3131,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 3.0.11;
+				MARKETING_VERSION = 3.0.13;
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tovam.StatsCompact;
 				PRODUCT_NAME = "Stats Compact";
@@ -3168,7 +3168,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 3.0.11;
+				MARKETING_VERSION = 3.0.13;
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.tovam.StatsCompact;
 				PRODUCT_NAME = "Stats Compact";
