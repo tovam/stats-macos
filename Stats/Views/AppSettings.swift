@@ -173,7 +173,6 @@ class ApplicationSettings: NSStackView {
             PreferencesRow(component: buttonView(#selector(self.logoutFromRemote), text: localizedString("Logout"))),
             PreferencesRow(component: buttonView(#selector(self.deregisterFromRemote), text: localizedString("Deregister")))
         ])
-        scrollView.stackView.addArrangedSubview(self.remoteView!)
         self.remoteView?.setRowVisibility(1, newState: false)
         self.remoteView?.setRowVisibility(2, newState: false)
         self.remoteView?.setRowVisibility(3, newState: false)
@@ -285,10 +284,11 @@ class ApplicationSettings: NSStackView {
         let statsVersion: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 16))
         statsVersion.alignment = .center
         statsVersion.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        statsVersion.stringValue = "\(localizedString("Version")) \(versionNumber)"
+        let releaseTag = Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String ?? "build local"
+        statsVersion.stringValue = "Stats Compact · \(releaseTag)\nBase upstream · Stats \(versionNumber)"
+        statsVersion.maximumNumberOfLines = 2
         statsVersion.isSelectable = true
-        let releaseTag = Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String ?? "unstamped"
-        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)\nFork release: \(releaseTag)"
+        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)\nFork release: \(releaseTag)\nUpstream Stats: \(versionNumber)"
         
         let updateButton = CompactUpdateActionButton(target: self, action: #selector(self.updateAction))
         
@@ -299,7 +299,7 @@ class ApplicationSettings: NSStackView {
         container.addRow(with: [updateButton])
         
         container.row(at: 1).height = 22
-        container.row(at: 2).height = 20
+        container.row(at: 2).height = 34
         container.row(at: 3).height = 22
         container.row(at: 4).height = 30
         
