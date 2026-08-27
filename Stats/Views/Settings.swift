@@ -94,7 +94,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(menuCallback), name: .openModuleSettings, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(externalModuleToggle), name: .toggleModule, object: nil)
         
-        self.sidebarView.setModules(modules)
+        self.sidebarView.setModules(modules.filter { $0.config.name != ModuleType.remote.stringValue })
         self.sidebarView.openMenu("Dashboard")
     }
     
