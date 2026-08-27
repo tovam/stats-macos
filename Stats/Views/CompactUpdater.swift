@@ -263,6 +263,129 @@ private extension NSLock {
     }
 }
 
+internal final class ForkSettingsView: NSStackView {
+    private let repositoryURL = URL(string: "https://github.com/tovam/stats-macos")!
+    private var updateWindow: UpdateWindow?
+
+    init() {
+        super.init(frame: NSRect(
+            x: 0,
+            y: 0,
+            width: Constants.Settings.width,
+            height: Constants.Settings.height
+        ))
+        self.translatesAutoresizingMaskIntoConstraints = false
+        self.orientation = .vertical
+
+        let scrollView = ScrollableStackView(orientation: .vertical)
+        scrollView.stackView.edgeInsets = NSEdgeInsets(
+            top: Constants.Settings.margin,
+            left: Constants.Settings.margin,
+            bottom: Constants.Settings.margin,
+            right: Constants.Settings.margin
+        )
+        scrollView.stackView.spacing = Constants.Settings.margin
+        scrollView.stackView.addArrangedSubview(self.informationSection())
+        scrollView.stackView.addArrangedSubview(self.updateSection())
+        scrollView.stackView.addArrangedSubview(self.featuresSection())
+        scrollView.stackView.addArrangedSubview(CompactColorSettingsView())
+        self.addArrangedSubview(scrollView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func informationSection() -> NSView {
+        let upstreamVersion = self.bundleValue("CFBundleShortVersionString", fallback: "unknown")
+        let release = self.bundleValue("CompactReleaseTag", fallback: "local build")
+        let fullSHA = self.bundleValue("CompactBuildSHA", fallback: "not stamped")
+        let shortSHA = fullSHA == "not stamped" ? fullSHA : String(fullSHA.prefix(12))
+        let buildDate = self.bundleValue("CompactBuildDate", fallback: "not stamped")
+
+        return PreferencesSection(
+            title: "Stats Compact fork",
+            subtitle: "Personal fork of exelban/stats",
+            [
+                PreferencesRow("Fork version", component: self.valueField(release)),
+                PreferencesRow("Upstream base", component: self.valueField("Stats \(upstreamVersion)")),
+                PreferencesRow("Build commit", component: self.valueField(shortSHA)),
+                PreferencesRow("Build date", component: self.valueField(buildDate)),
+                PreferencesRow(
+                    "Repository",
+                    "Public source and releases",
+                    component: buttonView(#selector(self.openRepository), text: "Open GitHub")
+                )
+            ]
+        )
+    }
+
+    private func updateSection() -> NSView {
+        PreferencesSection(
+            title: "Fork updates",
+            subtitle: "Verified public releases from tovam/stats-macos",
+            [
+                PreferencesRow("Status", component: CompactUpdateStatusView()),
+                PreferencesRow(
+                    "Action",
+                    component: CompactUpdateActionButton(target: self, action: #selector(self.updateAction))
+                )
+            ]
+        )
+    }
+
+    private func featuresSection() -> NSView {
+        PreferencesSection(
+            title: "Fork features",
+            subtitle: "Custom behavior included in this build",
+            [
+                PreferencesRow("Menu bar", component: self.valueField("C / R / Fr / Sw · 2 × 2")),
+                PreferencesRow("Combined popup", component: self.valueField("CPU · RAM · Disk · Network")),
+                PreferencesRow("Context click", component: self.valueField("Opens global Settings"))
+            ]
+        )
+    }
+
+    private func valueField(_ value: String) -> NSTextField {
+        let field = textView(value, alignment: .right)
+        field.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        field.lineBreakMode = .byTruncatingMiddle
+        field.maximumNumberOfLines = 1
+        field.toolTip = value
+        return field
+    }
+
+    private func bundleValue(_ key: String, fallback: String) -> String {
+        Bundle.main.object(forInfoDictionaryKey: key) as? String ?? fallback
+    }
+
+    @objc private func openRepository() {
+        NSWorkspace.shared.open(self.repositoryURL)
+    }
+
+    @objc private func updateAction() {
+        updater.check(force: true) { [weak self] result, error in
+            if let error {
+                debug("error updater.check(): \(error.localizedDescription)")
+                return
+            }
+            guard let self, let version = result else {
+                debug("download error(): no version found")
+                return
+            }
+
+            DispatchQueue.main.async {
+                if self.updateWindow == nil {
+                    let window = UpdateWindow()
+                    window.onClose = { [weak self] in self?.updateWindow = nil }
+                    self.updateWindow = window
+                }
+                self.updateWindow?.open(version, settingButton: true)
+            }
+        }
+    }
+}
+
 internal final class CompactUpdateStatusView: NSStackView {
     private let dot = CompactUpdateDotView()
     private let field = NSTextField(labelWithString: "")
@@ -274,7 +397,7 @@ internal final class CompactUpdateStatusView: NSStackView {
         self.orientation = .horizontal
         self.alignment = .top
         self.spacing = 6
-        self.widthAnchor.constraint(lessThanOrEqualToConstant: 430).isActive = true
+        self.widthAnchor.constraint(lessThanOrEqualToConstant: 340).isActive = true
 
         self.dot.widthAnchor.constraint(equalToConstant: 7).isActive = true
         self.dot.heightAnchor.constraint(equalToConstant: 7).isActive = true
@@ -286,9 +409,9 @@ internal final class CompactUpdateStatusView: NSStackView {
         self.detailsField.font = NSFont.systemFont(ofSize: 9)
         self.detailsField.textColor = .secondaryLabelColor
         self.detailsField.lineBreakMode = .byWordWrapping
-        self.detailsField.maximumNumberOfLines = 3
+        self.detailsField.maximumNumberOfLines = 4
         self.detailsField.isSelectable = true
-        self.detailsField.widthAnchor.constraint(lessThanOrEqualToConstant: 405).isActive = true
+        self.detailsField.widthAnchor.constraint(lessThanOrEqualToConstant: 315).isActive = true
 
         self.textStack.orientation = .vertical
         self.textStack.alignment = .leading

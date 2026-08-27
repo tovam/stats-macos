@@ -90,8 +90,6 @@ class ApplicationSettings: NSStackView {
         )
         scrollView.stackView.spacing = Constants.Settings.margin
         
-        scrollView.stackView.addArrangedSubview(self.informationView())
-        
         self.updateSelector = selectView(
             action: #selector(self.toggleUpdateInterval),
             items: AppUpdateIntervals,
@@ -145,7 +143,6 @@ class ApplicationSettings: NSStackView {
             ))
         ])
         scrollView.stackView.addArrangedSubview(self.combinedModulesView!)
-        scrollView.stackView.addArrangedSubview(CompactColorSettingsView())
         self.combinedModulesView?.setRowVisibility(1, newState: self.combinedModulesState)
         self.combinedModulesView?.setRowVisibility(2, newState: self.combinedModulesState)
         self.combinedModulesView?.setRowVisibility(3, newState: self.combinedModulesState)
@@ -258,14 +255,14 @@ class ApplicationSettings: NSStackView {
     
     private func informationView() -> NSView {
         let view = NSStackView()
-        view.heightAnchor.constraint(equalToConstant: 248).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 220).isActive = true
         view.orientation = .vertical
         view.distribution = .fill
         view.alignment = .centerY
         view.spacing = 0
         
         let container: NSGridView = NSGridView()
-        container.heightAnchor.constraint(equalToConstant: 208).isActive = true
+        container.heightAnchor.constraint(equalToConstant: 180).isActive = true
         container.rowSpacing = 0
         container.yPlacement = .center
         container.xPlacement = .center
@@ -275,7 +272,7 @@ class ApplicationSettings: NSStackView {
         let statsName: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 22))
         statsName.alignment = .center
         statsName.font = NSFont.systemFont(ofSize: 20, weight: .regular)
-        statsName.stringValue = "Stats Compact"
+        statsName.stringValue = "Stats"
         statsName.isSelectable = true
         
         let versionNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String
@@ -284,24 +281,24 @@ class ApplicationSettings: NSStackView {
         let statsVersion: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 16))
         statsVersion.alignment = .center
         statsVersion.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        let releaseTag = Bundle.main.object(forInfoDictionaryKey: "CompactReleaseTag") as? String ?? "build local"
-        statsVersion.stringValue = "Stats Compact · \(releaseTag)\nBase upstream · Stats \(versionNumber)"
-        statsVersion.maximumNumberOfLines = 2
+        statsVersion.stringValue = "\(localizedString("Version")) \(versionNumber)"
         statsVersion.isSelectable = true
-        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)\nFork release: \(releaseTag)\nUpstream Stats: \(versionNumber)"
+        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)"
         
-        let updateButton = CompactUpdateActionButton(target: self, action: #selector(self.updateAction))
+        let updateButton: NSButton = NSButton()
+        updateButton.title = localizedString("Check for update")
+        updateButton.bezelStyle = .rounded
+        updateButton.target = self
+        updateButton.action = #selector(self.updateAction)
         
         container.addRow(with: [iconView])
         container.addRow(with: [statsName])
         container.addRow(with: [statsVersion])
-        container.addRow(with: [CompactUpdateStatusView()])
         container.addRow(with: [updateButton])
         
         container.row(at: 1).height = 22
-        container.row(at: 2).height = 34
-        container.row(at: 3).height = 50
-        container.row(at: 4).height = 30
+        container.row(at: 2).height = 20
+        container.row(at: 3).height = 30
         
         view.addArrangedSubview(container)
         

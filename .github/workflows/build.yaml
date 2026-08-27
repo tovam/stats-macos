@@ -43,6 +43,7 @@ jobs:
           ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           persist-credentials: false
       - name: Build application
+        id: build_application
         shell: bash
         run: |
           set -o pipefail
@@ -56,27 +57,28 @@ jobs:
       - name: Stamp fork release metadata
         id: release_metadata
         shell: bash
-        env:
-          RELEASE_SHA: ${{ inputs.ref != '' && inputs.ref || github.sha }}
         run: |
           set -euo pipefail
           app_plist="build/Build/Products/Release/Stats Compact.app/Contents/Info.plist"
           test -f "$app_plist"
 
-          release_date="$(date -u +%Y-%m-%d)"
           build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          short_sha="${RELEASE_SHA:0:7}"
-          tag="weekly-${release_date}-${short_sha}-${GITHUB_RUN_NUMBER}"
+          resolved_sha="$(git rev-parse HEAD)"
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_plist")"
+          test -n "$version"
+          tag="v${version}-statscompact.${GITHUB_RUN_ID}"
 
           /usr/libexec/PlistBuddy -c "Delete :CompactReleaseTag" "$app_plist" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :CompactBuildSHA" "$app_plist" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :CompactBuildDate" "$app_plist" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :CompactReleaseRepository" "$app_plist" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :CompactReleaseTag string $tag" "$app_plist"
-          /usr/libexec/PlistBuddy -c "Add :CompactBuildSHA string $RELEASE_SHA" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactBuildSHA string $resolved_sha" "$app_plist"
           /usr/libexec/PlistBuddy -c "Add :CompactBuildDate string $build_date" "$app_plist"
           /usr/libexec/PlistBuddy -c "Add :CompactReleaseRepository string tovam/stats-macos" "$app_plist"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$resolved_sha" >> "$GITHUB_OUTPUT"
       - name: Report build errors
         if: failure()
         shell: bash
@@ -107,16 +109,36 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+          RELEASE_SHA: ${{ steps.release_metadata.outputs.sha }}
           RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_metadata.outputs.version }}
         run: |
           set -euo pipefail
-          release_date="$(date -u +%Y-%m-%d)"
           short_sha="${RELEASE_SHA:0:7}"
           gh release create "$RELEASE_TAG" \
             "build/Stats-Compact.app.zip#Stats-Compact.app.zip" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$RELEASE_SHA" \
-            --title "Stats Compact weekly build ${release_date}" \
-            --notes "Automatic Stats Compact build after merging exelban/stats. Fork commit: ${short_sha}." \
+            --title "Stats Compact ${RELEASE_TAG}" \
+            --notes "Successful Stats Compact build. Upstream base: Stats ${RELEASE_VERSION}. Fork commit: ${short_sha}. Workflow run: ${GITHUB_RUN_ID}." \
             --latest
+      - name: Tag successful build
+        if: ${{ always() && !cancelled() && steps.build_application.outcome == 'success' && steps.release_metadata.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_SHA: ${{ steps.release_metadata.outputs.sha }}
+          BUILD_TAG: ${{ steps.release_metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${BUILD_TAG}" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$existing_sha" != "$BUILD_SHA" ]]; then
+              echo "::error title=Build tag collision::${BUILD_TAG} already points to ${existing_sha}, expected ${BUILD_SHA}."
+              exit 1
+            fi
+            echo "Build tag ${BUILD_TAG} already exists on ${BUILD_SHA}."
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${BUILD_TAG}" \
+              -f sha="$BUILD_SHA"
+          fi

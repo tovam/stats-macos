@@ -28,6 +28,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     
     private var dashboard: NSView = Dashboard()
     private var settings: ApplicationSettings = ApplicationSettings()
+    private var forkSettings: ForkSettingsView = ForkSettingsView()
     
     private var toggleButton: NSControl? = nil
     private var activeModuleName: String? = nil
@@ -206,6 +207,11 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
                 self.toggleButton?.isHidden = true
                 self.settingsPreviewButton?.isHidden = true
                 NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+            } else if title == "Fork" {
+                view = self.forkSettings
+                self.toggleButton?.isHidden = true
+                self.settingsPreviewButton?.isHidden = true
+                NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
             }
             
             self.title = localizedString(title)
@@ -311,6 +317,7 @@ private class SidebarView: NSStackView {
     }
     
     private var dashboardIcon: NSImage { NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: nil)! }
+    private var forkIcon: NSImage { NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)! }
     private var settingsIcon: NSImage { iconFromSymbol(name: "gear", scale: .large) }
     private var bugIcon: NSImage { iconFromSymbol(name: "ladybug", scale: .large) }
     private var supportIcon: NSImage { iconFromSymbol(name: "heart.fill", scale: .large) }
@@ -333,6 +340,7 @@ private class SidebarView: NSStackView {
         
         self.scrollView.stackView.addArrangedSubview(MenuItem(icon: self.dashboardIcon, title: "Dashboard"))
         self.scrollView.stackView.addArrangedSubview(spacer)
+        self.scrollView.stackView.addArrangedSubview(MenuItem(icon: self.forkIcon, title: "Fork"))
         
         self.supportPopover.behavior = .transient
         self.supportPopover.contentViewController = self.supportView()
