@@ -40,6 +40,7 @@ internal struct CompactUpdateSnapshot {
     let color: NSColor
     let message: String
     let details: String
+    let showsDetails: Bool
 }
 
 internal final class CompactUpdateMonitor {
@@ -125,7 +126,8 @@ internal final class CompactUpdateMonitor {
                     needsAttention: true,
                     color: .systemRed,
                     message: "Weekly build failed",
-                    details: "The Monday workflow failed \(self.relativeAge(max(0, now - workflow.startedAt))).\n\(workflow.pageURL)"
+                    details: "Conclusion: \(workflow.conclusion ?? "unknown") · started \(self.relativeAge(max(0, now - workflow.startedAt))).\n\(workflow.pageURL)",
+                    showsDetails: true
                 )
             }
 
@@ -134,7 +136,8 @@ internal final class CompactUpdateMonitor {
                     needsAttention: true,
                     color: .systemGreen,
                     message: "Update available · \(release.tag)",
-                    details: "The public release is ready. Open Settings to install it.\n\(release.pageURL)"
+                    details: "The public release is ready. Open Settings to install it.\n\(release.pageURL)",
+                    showsDetails: false
                 )
             }
 
@@ -143,7 +146,8 @@ internal final class CompactUpdateMonitor {
                     needsAttention: false,
                     color: .secondaryLabelColor,
                     message: "Update status has not been checked yet",
-                    details: lastError.isEmpty ? "Waiting for the first successful check." : lastError
+                    details: lastError.isEmpty ? "Waiting for the first successful check." : lastError,
+                    showsDetails: !lastError.isEmpty
                 )
             }
 
@@ -152,7 +156,8 @@ internal final class CompactUpdateMonitor {
                     needsAttention: false,
                     color: .systemOrange,
                     message: "Latest check failed · last success \(self.relativeAge(age))",
-                    details: lastError
+                    details: lastError,
+                    showsDetails: true
                 )
             }
 
@@ -160,7 +165,8 @@ internal final class CompactUpdateMonitor {
                 needsAttention: false,
                 color: .systemGreen,
                 message: "Fork is up to date · checked \(self.relativeAge(age))",
-                details: release?.tag ?? "No published release metadata cached."
+                details: release?.tag ?? "No published release metadata cached.",
+                showsDetails: false
             )
         }
     }
@@ -260,13 +266,15 @@ private extension NSLock {
 internal final class CompactUpdateStatusView: NSStackView {
     private let dot = CompactUpdateDotView()
     private let field = NSTextField(labelWithString: "")
+    private let detailsField = NSTextField(labelWithString: "")
+    private let textStack = NSStackView()
 
     init() {
         super.init(frame: .zero)
         self.orientation = .horizontal
-        self.alignment = .centerY
+        self.alignment = .top
         self.spacing = 6
-        self.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
+        self.widthAnchor.constraint(lessThanOrEqualToConstant: 430).isActive = true
 
         self.dot.widthAnchor.constraint(equalToConstant: 7).isActive = true
         self.dot.heightAnchor.constraint(equalToConstant: 7).isActive = true
@@ -275,8 +283,21 @@ internal final class CompactUpdateStatusView: NSStackView {
         self.field.lineBreakMode = .byTruncatingMiddle
         self.field.maximumNumberOfLines = 1
 
+        self.detailsField.font = NSFont.systemFont(ofSize: 9)
+        self.detailsField.textColor = .secondaryLabelColor
+        self.detailsField.lineBreakMode = .byWordWrapping
+        self.detailsField.maximumNumberOfLines = 3
+        self.detailsField.isSelectable = true
+        self.detailsField.widthAnchor.constraint(lessThanOrEqualToConstant: 405).isActive = true
+
+        self.textStack.orientation = .vertical
+        self.textStack.alignment = .leading
+        self.textStack.spacing = 2
+        self.textStack.addArrangedSubview(self.field)
+        self.textStack.addArrangedSubview(self.detailsField)
+
         self.addArrangedSubview(self.dot)
-        self.addArrangedSubview(self.field)
+        self.addArrangedSubview(self.textStack)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(self.updateState),
@@ -298,6 +319,8 @@ internal final class CompactUpdateStatusView: NSStackView {
         let state = CompactUpdateMonitor.shared.snapshot
         self.dot.color = state.color
         self.field.stringValue = state.message
+        self.detailsField.stringValue = state.details
+        self.detailsField.isHidden = !state.showsDetails
         self.toolTip = state.details
     }
 }
@@ -346,6 +369,10 @@ private final class CompactUpdateDotView: NSView {
 
 internal final class CompactUpdater {
     let usesSubtleIndicator = true
+
+    private struct GitHubAPIError: Decodable {
+        let message: String
+    }
 
     private struct GitHubRelease: Decodable {
         struct Asset: Decodable {
@@ -544,50 +571,65 @@ internal final class CompactUpdater {
     private func fetchRelease(completion: @escaping (Result<CompactForkRelease, Error>) -> Void) {
         self.fetch(self.releaseEndpoint) { [weak self] result in
             guard let self else { return }
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                let payload = try decoder.decode(GitHubRelease.self, from: result.get())
-                guard let asset = payload.assets.first(where: { $0.name == "Stats-Compact.app.zip" }),
-                      let digest = asset.digest,
-                      digest.hasPrefix("sha256:"),
-                      self.isAllowedDownloadURL(asset.browserDownloadURL) else {
-                    completion(.failure(self.error(
-                        "The latest release does not contain a valid Stats-Compact.app.zip asset."
-                    )))
-                    return
-                }
-                completion(.success(CompactForkRelease(
-                    tag: payload.tagName,
-                    targetSHA: payload.targetCommitish,
-                    assetURL: asset.browserDownloadURL,
-                    assetDigest: digest,
-                    pageURL: payload.htmlURL,
-                    publishedAt: Int(payload.publishedAt.timeIntervalSince1970)
-                )))
-            } catch {
+            switch result {
+            case .failure(let error):
                 completion(.failure(error))
+            case .success(let data):
+                do {
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .iso8601
+                    let payload = try decoder.decode(GitHubRelease.self, from: data)
+                    guard let asset = payload.assets.first(where: { $0.name == "Stats-Compact.app.zip" }),
+                          let digest = asset.digest,
+                          digest.hasPrefix("sha256:"),
+                          self.isAllowedDownloadURL(asset.browserDownloadURL) else {
+                        completion(.failure(self.error(
+                            "The latest release does not contain a valid Stats-Compact.app.zip asset."
+                        )))
+                        return
+                    }
+                    completion(.success(CompactForkRelease(
+                        tag: payload.tagName,
+                        targetSHA: payload.targetCommitish,
+                        assetURL: asset.browserDownloadURL,
+                        assetDigest: digest,
+                        pageURL: payload.htmlURL,
+                        publishedAt: Int(payload.publishedAt.timeIntervalSince1970)
+                    )))
+                } catch {
+                    completion(.failure(self.error(
+                        "GitHub latest release data could not be decoded: \(self.decodingDescription(error))"
+                    )))
+                }
             }
         }
     }
 
     private func fetchWorkflow(completion: @escaping (Result<CompactWeeklyWorkflow?, Error>) -> Void) {
-        self.fetch(self.workflowEndpoint) { result in
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                let payload = try decoder.decode(GitHubWorkflowRuns.self, from: result.get())
-                completion(.success(payload.workflowRuns.first.map {
-                    CompactWeeklyWorkflow(
-                        id: $0.id,
-                        status: $0.status,
-                        conclusion: $0.conclusion,
-                        pageURL: $0.htmlURL,
-                        startedAt: Int(($0.runStartedAt ?? $0.createdAt).timeIntervalSince1970)
-                    )
-                }))
-            } catch {
+        self.fetch(self.workflowEndpoint) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
                 completion(.failure(error))
+            case .success(let data):
+                do {
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .iso8601
+                    let payload = try decoder.decode(GitHubWorkflowRuns.self, from: data)
+                    completion(.success(payload.workflowRuns.first.map {
+                        CompactWeeklyWorkflow(
+                            id: $0.id,
+                            status: $0.status,
+                            conclusion: $0.conclusion,
+                            pageURL: $0.htmlURL,
+                            startedAt: Int(($0.runStartedAt ?? $0.createdAt).timeIntervalSince1970)
+                        )
+                    }))
+                } catch {
+                    completion(.failure(self.error(
+                        "GitHub weekly build data could not be decoded: \(self.decodingDescription(error))"
+                    )))
+                }
             }
         }
     }
@@ -601,16 +643,87 @@ internal final class CompactUpdater {
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self else { return }
+            let endpoint = self.endpointName(url)
             if let error {
-                completion(.failure(error))
+                let nsError = error as NSError
+                completion(.failure(self.error(
+                    "GitHub \(endpoint) request failed: network error \(nsError.code) — \(nsError.localizedDescription)"
+                )))
                 return
             }
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data else {
-                completion(.failure(self.error("GitHub returned an invalid response.")))
+            guard let http = response as? HTTPURLResponse else {
+                completion(.failure(self.error("GitHub \(endpoint) did not return an HTTP response.")))
+                return
+            }
+            guard http.statusCode == 200 else {
+                completion(.failure(self.error(self.httpError(http, data: data, endpoint: endpoint))))
+                return
+            }
+            guard let data, !data.isEmpty else {
+                completion(.failure(self.error("GitHub \(endpoint) returned an empty response.")))
                 return
             }
             completion(.success(data))
         }.resume()
+    }
+
+    private func endpointName(_ url: URL) -> String {
+        if url.path.hasSuffix("/releases/latest") { return "latest release" }
+        if url.path.contains("/actions/workflows/") { return "weekly build" }
+        return "API"
+    }
+
+    private func httpError(_ response: HTTPURLResponse, data: Data?, endpoint: String) -> String {
+        var message = "GitHub \(endpoint): HTTP \(response.statusCode)"
+        var rateLimited = response.statusCode == 429 ||
+            response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+        if let data,
+           let payload = try? JSONDecoder().decode(GitHubAPIError.self, from: data) {
+            if payload.message.range(of: "rate limit", options: .caseInsensitive) != nil {
+                rateLimited = true
+                message += " — API rate limit exceeded."
+            } else {
+                let detail = payload.message
+                    .components(separatedBy: .whitespacesAndNewlines)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                if !detail.isEmpty {
+                    message += " — \(detail.prefix(240))"
+                }
+            }
+        }
+
+        if rateLimited,
+           let reset = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+           let timestamp = TimeInterval(reset) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+            message += " Retry after \(formatter.string(from: Date(timeIntervalSince1970: timestamp)))."
+        } else if let retry = response.value(forHTTPHeaderField: "Retry-After") {
+            message += " Retry after \(retry) seconds."
+        }
+        return message
+    }
+
+    private func decodingDescription(_ error: Error) -> String {
+        let path: ([CodingKey]) -> String = { codingPath in
+            let value = codingPath.map(\.stringValue).joined(separator: ".")
+            return value.isEmpty ? "response root" : value
+        }
+
+        switch error {
+        case DecodingError.keyNotFound(let key, let context):
+            return "missing field \(key.stringValue) at \(path(context.codingPath))"
+        case DecodingError.valueNotFound(_, let context):
+            return "missing value at \(path(context.codingPath))"
+        case DecodingError.typeMismatch(_, let context):
+            return "unexpected value at \(path(context.codingPath))"
+        case DecodingError.dataCorrupted(let context):
+            return "invalid data at \(path(context.codingPath)): \(context.debugDescription)"
+        default:
+            return error.localizedDescription
+        }
     }
 
     func download(

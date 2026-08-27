@@ -258,14 +258,14 @@ class ApplicationSettings: NSStackView {
     
     private func informationView() -> NSView {
         let view = NSStackView()
-        view.heightAnchor.constraint(equalToConstant: 220).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 248).isActive = true
         view.orientation = .vertical
         view.distribution = .fill
         view.alignment = .centerY
         view.spacing = 0
         
         let container: NSGridView = NSGridView()
-        container.heightAnchor.constraint(equalToConstant: 180).isActive = true
+        container.heightAnchor.constraint(equalToConstant: 208).isActive = true
         container.rowSpacing = 0
         container.yPlacement = .center
         container.xPlacement = .center
@@ -300,7 +300,7 @@ class ApplicationSettings: NSStackView {
         
         container.row(at: 1).height = 22
         container.row(at: 2).height = 34
-        container.row(at: 3).height = 22
+        container.row(at: 3).height = 50
         container.row(at: 4).height = 30
         
         view.addArrangedSubview(container)
