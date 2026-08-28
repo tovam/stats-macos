@@ -138,18 +138,23 @@ internal struct CompactColorScale {
     ]
 
     let configuration: CompactColorScaleConfiguration
+    private let orderedStops: [CompactColorStop]
 
-    func color(for value: Double) -> NSColor {
-        let stops = self.configuration.stops.enumerated().sorted { lhs, rhs in
+    init(configuration: CompactColorScaleConfiguration) {
+        self.configuration = configuration
+        self.orderedStops = configuration.stops.enumerated().sorted { lhs, rhs in
             lhs.element.value == rhs.element.value ? lhs.offset < rhs.offset : lhs.element.value < rhs.element.value
         }.map(\.element)
-        guard let first = stops.first, let last = stops.last else { return .white }
+    }
+
+    func color(for value: Double) -> NSColor {
+        guard let first = self.orderedStops.first, let last = self.orderedStops.last else { return .white }
         if value < first.value { return first.color }
         if value >= last.value { return last.color }
 
-        for index in 0..<(stops.count - 1) {
-            let start = stops[index]
-            let end = stops[index + 1]
+        for index in 0..<(self.orderedStops.count - 1) {
+            let start = self.orderedStops[index]
+            let end = self.orderedStops[index + 1]
             if end.value <= start.value || value >= end.value { continue }
             let startPosition = self.position(for: start.value)
             let endPosition = self.position(for: end.value)
@@ -270,7 +275,7 @@ internal final class CompactColorScaleStore {
 }
 
 internal final class CompactColorAnimator {
-    var onUpdate: (() -> Void)?
+    var onUpdate: (([CompactMetric]) -> Void)?
 
     private struct Animation {
         let from: NSColor
@@ -279,6 +284,8 @@ internal final class CompactColorAnimator {
     }
 
     private let duration: TimeInterval = 0.35
+    private let framesPerSecond: TimeInterval = 12
+    private let perceptibleColorDelta: CGFloat = 1 / 255
     private var colors: [CompactMetric: NSColor] = [:]
     private var targets: [CompactMetric: NSColor] = [:]
     private var animations: [CompactMetric: Animation] = [:]
@@ -293,7 +300,7 @@ internal final class CompactColorAnimator {
     }
 
     func setTarget(_ color: NSColor, for metric: CompactMetric, animated: Bool = true) {
-        if let target = self.targets[metric], target.isEqual(color) {
+        if let target = self.targets[metric], self.visuallyMatches(target, color) {
             return
         }
         self.targets[metric] = color
@@ -301,7 +308,7 @@ internal final class CompactColorAnimator {
         guard animated, let current = self.colors[metric] else {
             self.colors[metric] = color
             self.animations.removeValue(forKey: metric)
-            self.onUpdate?()
+            self.onUpdate?([metric])
             return
         }
 
@@ -315,17 +322,21 @@ internal final class CompactColorAnimator {
 
     private func startTimerIfNeeded() {
         guard self.timer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        let interval = 1 / self.framesPerSecond
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        timer.tolerance = interval / 4
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
     private func tick() {
         let now = ProcessInfo.processInfo.systemUptime
+        let activeMetrics = Array(self.animations.keys)
         var completed: [CompactMetric] = []
-        for (metric, animation) in self.animations {
+        for metric in activeMetrics {
+            guard let animation = self.animations[metric] else { continue }
             let progress = (now - animation.startedAt) / self.duration
             if progress >= 1 {
                 self.colors[metric] = animation.to
@@ -340,11 +351,24 @@ internal final class CompactColorAnimator {
         }
         completed.forEach { self.animations.removeValue(forKey: $0) }
 
-        self.onUpdate?()
+        if !activeMetrics.isEmpty {
+            self.onUpdate?(activeMetrics)
+        }
         if self.animations.isEmpty {
             self.timer?.invalidate()
             self.timer = nil
         }
+    }
+
+    private func visuallyMatches(_ first: NSColor, _ second: NSColor) -> Bool {
+        guard let lhs = first.usingColorSpace(.deviceRGB),
+              let rhs = second.usingColorSpace(.deviceRGB) else {
+            return first.isEqual(second)
+        }
+        return abs(lhs.redComponent - rhs.redComponent) <= self.perceptibleColorDelta &&
+            abs(lhs.greenComponent - rhs.greenComponent) <= self.perceptibleColorDelta &&
+            abs(lhs.blueComponent - rhs.blueComponent) <= self.perceptibleColorDelta &&
+            abs(lhs.alphaComponent - rhs.alphaComponent) <= self.perceptibleColorDelta
     }
 }
 
@@ -407,8 +431,8 @@ internal final class CompactCombinedBridge: NSObject {
         self.view?.setDiskFree(value)
     }
 
-    @objc private func listenForColorScaleChange() {
-        self.view?.refreshColors()
+    @objc private func listenForColorScaleChange(_ notification: Notification) {
+        self.view?.refreshColors(notification.object as? CompactMetric)
     }
 
     @objc private func listenForUpdateStateChange() {
@@ -418,13 +442,31 @@ internal final class CompactCombinedBridge: NSObject {
 
 internal final class CompactSystemView: NSView {
     internal var widthCallback: ((CGFloat) -> Void)?
+    internal var stateCallback: (() -> Void)?
 
     private let horizontalPadding: CGFloat = 4
     private let baseColumnSpacing: CGFloat = 7
     private let labelValueSpacing: CGFloat = 2
+    private let updateIndicatorWidth: CGFloat = 4
     private let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
     private let bytesPerGibibyte: Double = 1_073_741_824
     private let colorAnimator = CompactColorAnimator()
+    private let labels: [CompactMetric: String] = [
+        .cpu: "C",
+        .ram: "R",
+        .free: "Fr",
+        .swap: "Sw"
+    ]
+    private let centeredParagraphStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        return style
+    }()
+    private let rightParagraphStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .right
+        return style
+    }()
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -452,27 +494,38 @@ internal final class CompactSystemView: NSView {
     private var secondLabelWidth: CGFloat = 0
     private var secondValueWidth: CGFloat = 0
     private var firstColumnWidth: CGFloat = 0
+    private var configuredSpacing: CGFloat = 0
+    private var separator: Bool = false
+    private var scales: [CompactMetric: CompactColorScale] = [:]
+    private var displayedValues: [CompactMetric: String] = [
+        .cpu: "-- %",
+        .ram: "-- %",
+        .free: "-- GB",
+        .swap: "-- GB"
+    ]
+    private var labelStrings: [CompactMetric: NSAttributedString] = [:]
+    private var valueStrings: [CompactMetric: NSMutableAttributedString] = [:]
+    private var displayScheduled: Bool = false
+    private var updateIndicatorColor: NSColor?
 
-    private var configuredSpacing: CGFloat {
-        CGFloat(Int(Store.shared.string(key: "CombinedModules_spacing", defaultValue: "none")) ?? 0)
-    }
-    private var separator: Bool {
-        Store.shared.bool(key: "CombinedModules_separator", defaultValue: false)
-    }
     private var columnSpacing: CGFloat {
         if self.separator {
             return self.baseColumnSpacing + (self.configuredSpacing * 2) + 4
         }
         return self.baseColumnSpacing + self.configuredSpacing
     }
-    private var updateIndicatorWidth: CGFloat {
-        CompactUpdateMonitor.shared.needsAttention ? 9 : 0
-    }
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
-        self.colorAnimator.onUpdate = { [weak self] in
-            self?.needsDisplay = true
+        CompactMetric.allCases.forEach {
+            self.scales[$0] = CompactColorScaleStore.shared.scale(for: $0)
+        }
+        self.updateIndicatorColor = CompactUpdateMonitor.shared.indicatorColor
+        self.rebuildTextCache()
+        self.colorAnimator.onUpdate = { [weak self] metrics in
+            guard let self else { return }
+            metrics.forEach(self.updateCachedValueColor)
+            self.scheduleDisplay()
         }
         self.recalculateWidth()
     }
@@ -482,48 +535,75 @@ internal final class CompactSystemView: NSView {
     }
 
     internal func setCPU(_ value: Double) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.cpu = value
+            let valueChanged = self.updateCachedValue(.cpu, value: self.cpuValue)
             self.updateColor(.cpu)
-            self.refresh()
+            if valueChanged {
+                self.scheduleDisplay()
+            }
         }
     }
 
     internal func setRAM(_ value: Double, swap: Double) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.ram = value
             self.swap = swap
+            let ramChanged = self.updateCachedValue(.ram, value: self.ramValue)
+            let swapChanged = self.updateCachedValue(.swap, value: self.swapValue)
             self.updateColor(.ram)
             self.updateColor(.swap)
-            self.refresh()
+            if ramChanged || swapChanged {
+                self.scheduleDisplay()
+            }
         }
     }
 
     internal func setDiskFree(_ value: Int64) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.diskFree = value
+            let valueChanged = self.updateCachedValue(.free, value: self.diskFreeValue)
             self.updateColor(.free)
-            self.refresh()
+            if valueChanged {
+                self.scheduleDisplay()
+            }
         }
     }
 
-    internal func refreshColors() {
-        DispatchQueue.main.async {
-            CompactMetric.allCases.forEach(self.updateColor)
+    internal func refreshColors(_ metric: CompactMetric? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let metrics = metric.map { [$0] } ?? CompactMetric.allCases
+            metrics.forEach {
+                self.scales[$0] = CompactColorScaleStore.shared.scale(for: $0)
+                self.updateColor($0)
+            }
         }
     }
 
     internal func refreshUpdateIndicator() {
-        DispatchQueue.main.async {
-            self.recalculateWidth()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.updateIndicatorColor = CompactUpdateMonitor.shared.indicatorColor
+            self.scheduleDisplay()
+            self.stateCallback?()
         }
     }
 
     internal func recalculateWidth() {
-        self.firstLabelWidth = max(self.width(of: self.cpuLabel), self.width(of: self.ramLabel))
-        self.firstValueWidth = max(self.width(of: self.cpuValue), self.width(of: self.ramValue))
-        self.secondLabelWidth = max(self.width(of: self.diskFreeLabel), self.width(of: self.swapLabel))
-        self.secondValueWidth = max(self.width(of: self.diskFreeValue), self.width(of: self.swapValue))
+        self.configuredSpacing = CGFloat(Int(Store.shared.string(
+            key: "CombinedModules_spacing",
+            defaultValue: "none"
+        )) ?? 0)
+        self.separator = Store.shared.bool(key: "CombinedModules_separator", defaultValue: false)
+
+        self.firstLabelWidth = max(self.width(of: self.label(.cpu)), self.width(of: self.label(.ram)))
+        self.firstValueWidth = self.width(of: "100 %")
+        self.secondLabelWidth = max(self.width(of: self.label(.free)), self.width(of: self.label(.swap)))
+        self.secondValueWidth = self.width(of: "9999 GB")
 
         let first = self.firstLabelWidth + self.labelValueSpacing + self.firstValueWidth
         let second = self.secondLabelWidth + self.labelValueSpacing + self.secondValueWidth
@@ -531,9 +611,12 @@ internal final class CompactSystemView: NSView {
 
         let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second +
             self.updateIndicatorWidth
-        self.setFrameSize(NSSize(width: width, height: Constants.Widget.height))
+        let size = NSSize(width: width, height: Constants.Widget.height)
+        if self.frame.size != size {
+            self.setFrameSize(size)
+        }
         self.widthCallback?(width)
-        self.needsDisplay = true
+        self.scheduleDisplay()
     }
 
     internal func openModule(at point: NSPoint, window: NSWindow, modules: [Module]) {
@@ -562,11 +645,11 @@ internal final class CompactSystemView: NSView {
             NSBezierPath.fill(NSRect(x: separatorX.rounded(.down), y: 3, width: 1, height: self.bounds.height - 6))
         }
 
-        self.draw(label: self.cpuLabel, value: self.cpuValue, metric: .cpu, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
-        self.draw(label: self.ramLabel, value: self.ramValue, metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
-        self.draw(label: self.diskFreeLabel, value: self.diskFreeValue, metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
-        self.draw(label: self.swapLabel, value: self.swapValue, metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
-        if let indicatorColor = CompactUpdateMonitor.shared.indicatorColor {
+        self.draw(metric: .cpu, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: true)
+        self.draw(metric: .ram, x: firstX, labelWidth: self.firstLabelWidth, valueWidth: self.firstValueWidth, top: false)
+        self.draw(metric: .free, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: true)
+        self.draw(metric: .swap, x: secondX, labelWidth: self.secondLabelWidth, valueWidth: self.secondValueWidth, top: false)
+        if let indicatorColor = self.updateIndicatorColor {
             indicatorColor.setFill()
             NSBezierPath(ovalIn: NSRect(
                 x: self.bounds.maxX - 6,
@@ -577,9 +660,10 @@ internal final class CompactSystemView: NSView {
         }
     }
 
-    private func refresh() {
-        self.recalculateWidth()
-        self.needsDisplay = true
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        self.rebuildTextCache()
+        self.scheduleDisplay()
     }
 
     private func module(at point: NSPoint) -> String {
@@ -591,8 +675,6 @@ internal final class CompactSystemView: NSView {
     }
 
     private func draw(
-        label: String,
-        value: String,
         metric: CompactMetric,
         x: CGFloat,
         labelWidth: CGFloat,
@@ -612,28 +694,75 @@ internal final class CompactSystemView: NSView {
             width: valueWidth,
             height: rowHeight
         )
-        self.draw(label, in: labelRect, alignment: .center, color: NSColor.textColor.withAlphaComponent(0.7))
-        self.draw(value, in: valueRect, alignment: .right, color: self.colorAnimator.color(for: metric))
+        self.labelStrings[metric]?.draw(with: labelRect)
+        self.valueStrings[metric]?.draw(with: valueRect)
     }
 
-    private func draw(_ text: String, in rect: NSRect, alignment: NSTextAlignment, color: NSColor) {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = alignment
+    private func attributedString(
+        _ text: String,
+        style: NSParagraphStyle,
+        color: NSColor
+    ) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [
             .font: self.font,
             .foregroundColor: color,
-            .paragraphStyle: paragraphStyle
-        ]).draw(with: rect)
+            .paragraphStyle: style
+        ])
     }
 
     private func width(of text: String) -> CGFloat {
         text.widthOfString(usingFont: self.font).rounded(.up) + 1
     }
 
-    private var cpuLabel: String { "C" }
-    private var ramLabel: String { "R" }
-    private var diskFreeLabel: String { "Fr" }
-    private var swapLabel: String { "Sw" }
+    private func label(_ metric: CompactMetric) -> String {
+        self.labels[metric] ?? ""
+    }
+
+    private func rebuildTextCache() {
+        CompactMetric.allCases.forEach { metric in
+            self.labelStrings[metric] = self.attributedString(
+                self.label(metric),
+                style: self.centeredParagraphStyle,
+                color: NSColor.textColor.withAlphaComponent(0.7)
+            )
+            self.valueStrings[metric] = NSMutableAttributedString(attributedString: self.attributedString(
+                self.displayedValues[metric] ?? "",
+                style: self.rightParagraphStyle,
+                color: self.colorAnimator.color(for: metric)
+            ))
+        }
+    }
+
+    @discardableResult
+    private func updateCachedValue(_ metric: CompactMetric, value: String) -> Bool {
+        guard self.displayedValues[metric] != value || self.valueStrings[metric] == nil else { return false }
+        self.displayedValues[metric] = value
+        self.valueStrings[metric] = NSMutableAttributedString(attributedString: self.attributedString(
+            value,
+            style: self.rightParagraphStyle,
+            color: self.colorAnimator.color(for: metric)
+        ))
+        return true
+    }
+
+    private func updateCachedValueColor(_ metric: CompactMetric) {
+        guard let value = self.valueStrings[metric], value.length > 0 else { return }
+        value.addAttribute(
+            .foregroundColor,
+            value: self.colorAnimator.color(for: metric),
+            range: NSRange(location: 0, length: value.length)
+        )
+    }
+
+    private func scheduleDisplay() {
+        guard !self.displayScheduled else { return }
+        self.displayScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.displayScheduled = false
+            self.needsDisplay = true
+        }
+    }
 
     private func updateColor(_ metric: CompactMetric) {
         let value: Double?
@@ -647,8 +776,8 @@ internal final class CompactSystemView: NSView {
         case .swap:
             value = self.swap.map { $0 / self.bytesPerGibibyte }
         }
-        guard let value else { return }
-        let color = CompactColorScaleStore.shared.scale(for: metric).color(for: value)
+        guard let value, let scale = self.scales[metric] else { return }
+        let color = scale.color(for: value)
         self.colorAnimator.setTarget(color, for: metric)
     }
 
@@ -710,23 +839,18 @@ internal final class CompactCombinedView: NSObject, NSGestureRecognizerDelegate 
 
         self.bridge = CompactCombinedBridge(view: self.view)
 
-        modules.forEach { module in
-            module.menuBar.callback = { [weak self] in
-                if let status = self?.status, status {
-                    DispatchQueue.main.async {
-                        self?.recalculate()
-                    }
-                }
-            }
-        }
-
         self.popup = PopupWindow(
             title: "Combined modules",
             module: .combined,
             view: CompactCombinedPopup()
         ) { _ in }
         self.view.widthCallback = { [weak self] width in
-            self?.menuBarItem?.length = width
+            if self?.menuBarItem?.length != width {
+                self?.menuBarItem?.length = width
+            }
+            self?.updateToolTip()
+        }
+        self.view.stateCallback = { [weak self] in
             self?.updateToolTip()
         }
 
