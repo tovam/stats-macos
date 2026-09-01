@@ -10,6 +10,30 @@ internal final class CompactColorSettingsView: NSStackView {
     init() {
         super.init(frame: .zero)
         self.orientation = .vertical
+        self.spacing = Constants.Settings.margin
+
+        self.addArrangedSubview(PreferencesSection(
+            title: "Compact display",
+            subtitle: "Visual overrides; color gradients remain unchanged",
+            [
+                PreferencesRow(
+                    "All white",
+                    "Draw every label and value in white",
+                    component: switchView(
+                        action: #selector(self.toggleAllWhite),
+                        state: CompactDisplayPreferences.allWhite
+                    )
+                ),
+                PreferencesRow(
+                    "Hide labels",
+                    "Show values only, without C / R / Fr / Sw",
+                    component: switchView(
+                        action: #selector(self.toggleLabels),
+                        state: CompactDisplayPreferences.hideLabels
+                    )
+                )
+            ]
+        ))
 
         let rows = CompactMetric.allCases.map { metric in
             PreferencesRow(
@@ -27,6 +51,14 @@ internal final class CompactColorSettingsView: NSStackView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func toggleAllWhite(_ sender: NSSwitch) {
+        CompactDisplayPreferences.allWhite = sender.state == .on
+    }
+
+    @objc private func toggleLabels(_ sender: NSSwitch) {
+        CompactDisplayPreferences.hideLabels = sender.state == .on
     }
 }
 

@@ -11,6 +11,28 @@ internal extension Notification.Name {
     static let compactRAMUsage = Notification.Name("compactRAMUsage")
     static let compactDiskFree = Notification.Name("compactDiskFree")
     static let compactColorScaleChanged = Notification.Name("compactColorScaleChanged")
+    static let compactDisplayPreferencesChanged = Notification.Name("compactDisplayPreferencesChanged")
+}
+
+internal enum CompactDisplayPreferences {
+    private static let allWhiteKey = "compact_display_all_white"
+    private static let hideLabelsKey = "compact_display_hide_labels"
+
+    static var allWhite: Bool {
+        get { Store.shared.bool(key: self.allWhiteKey, defaultValue: false) }
+        set {
+            Store.shared.set(key: self.allWhiteKey, value: newValue)
+            NotificationCenter.default.post(name: .compactDisplayPreferencesChanged, object: nil)
+        }
+    }
+
+    static var hideLabels: Bool {
+        get { Store.shared.bool(key: self.hideLabelsKey, defaultValue: false) }
+        set {
+            Store.shared.set(key: self.hideLabelsKey, value: newValue)
+            NotificationCenter.default.post(name: .compactDisplayPreferencesChanged, object: nil)
+        }
+    }
 }
 
 internal enum CompactMetric: String, CaseIterable {
@@ -405,6 +427,12 @@ internal final class CompactCombinedBridge: NSObject {
         )
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(self.listenForDisplayPreferencesChange),
+            name: .compactDisplayPreferencesChanged,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(self.listenForUpdateStateChange),
             name: .compactUpdateStateChanged,
             object: nil
@@ -433,6 +461,10 @@ internal final class CompactCombinedBridge: NSObject {
 
     @objc private func listenForColorScaleChange(_ notification: Notification) {
         self.view?.refreshColors(notification.object as? CompactMetric)
+    }
+
+    @objc private func listenForDisplayPreferencesChange() {
+        self.view?.refreshDisplayPreferences()
     }
 
     @objc private func listenForUpdateStateChange() {
@@ -507,6 +539,8 @@ internal final class CompactSystemView: NSView {
     private var valueStrings: [CompactMetric: NSMutableAttributedString] = [:]
     private var displayScheduled: Bool = false
     private var updateIndicatorColor: NSColor?
+    private var allWhite: Bool = CompactDisplayPreferences.allWhite
+    private var hideLabels: Bool = CompactDisplayPreferences.hideLabels
 
     private var columnSpacing: CGFloat {
         if self.separator {
@@ -584,6 +618,23 @@ internal final class CompactSystemView: NSView {
         }
     }
 
+    internal func refreshDisplayPreferences() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let previousHideLabels = self.hideLabels
+            self.allWhite = CompactDisplayPreferences.allWhite
+            self.hideLabels = CompactDisplayPreferences.hideLabels
+            self.rebuildTextCache()
+            CompactMetric.allCases.forEach(self.updateColor)
+
+            if previousHideLabels != self.hideLabels {
+                self.recalculateWidth()
+            } else {
+                self.scheduleDisplay()
+            }
+        }
+    }
+
     internal func refreshUpdateIndicator() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -600,13 +651,20 @@ internal final class CompactSystemView: NSView {
         )) ?? 0)
         self.separator = Store.shared.bool(key: "CombinedModules_separator", defaultValue: false)
 
-        self.firstLabelWidth = max(self.width(of: self.label(.cpu)), self.width(of: self.label(.ram)))
+        self.firstLabelWidth = self.hideLabels ? 0 : max(
+            self.width(of: self.label(.cpu)),
+            self.width(of: self.label(.ram))
+        )
         self.firstValueWidth = self.width(of: "100 %")
-        self.secondLabelWidth = max(self.width(of: self.label(.free)), self.width(of: self.label(.swap)))
+        self.secondLabelWidth = self.hideLabels ? 0 : max(
+            self.width(of: self.label(.free)),
+            self.width(of: self.label(.swap))
+        )
         self.secondValueWidth = self.width(of: "9999 GB")
 
-        let first = self.firstLabelWidth + self.labelValueSpacing + self.firstValueWidth
-        let second = self.secondLabelWidth + self.labelValueSpacing + self.secondValueWidth
+        let labelSpacing = self.hideLabels ? 0 : self.labelValueSpacing
+        let first = self.firstLabelWidth + labelSpacing + self.firstValueWidth
+        let second = self.secondLabelWidth + labelSpacing + self.secondValueWidth
         self.firstColumnWidth = first
 
         let width = (self.horizontalPadding * 2) + first + self.columnSpacing + second +
@@ -689,12 +747,14 @@ internal final class CompactSystemView: NSView {
             height: rowHeight
         )
         let valueRect = NSRect(
-            x: x + labelWidth + self.labelValueSpacing,
+            x: x + labelWidth + (self.hideLabels ? 0 : self.labelValueSpacing),
             y: labelRect.origin.y,
             width: valueWidth,
             height: rowHeight
         )
-        self.labelStrings[metric]?.draw(with: labelRect)
+        if !self.hideLabels {
+            self.labelStrings[metric]?.draw(with: labelRect)
+        }
         self.valueStrings[metric]?.draw(with: valueRect)
     }
 
@@ -723,7 +783,7 @@ internal final class CompactSystemView: NSView {
             self.labelStrings[metric] = self.attributedString(
                 self.label(metric),
                 style: self.centeredParagraphStyle,
-                color: NSColor.textColor.withAlphaComponent(0.7)
+                color: (self.allWhite ? NSColor.white : NSColor.textColor).withAlphaComponent(0.7)
             )
             self.valueStrings[metric] = NSMutableAttributedString(attributedString: self.attributedString(
                 self.displayedValues[metric] ?? "",
@@ -777,7 +837,7 @@ internal final class CompactSystemView: NSView {
             value = self.swap.map { $0 / self.bytesPerGibibyte }
         }
         guard let value, let scale = self.scales[metric] else { return }
-        let color = scale.color(for: value)
+        let color = self.allWhite ? NSColor.white : scale.color(for: value)
         self.colorAnimator.setTarget(color, for: metric)
     }
 
