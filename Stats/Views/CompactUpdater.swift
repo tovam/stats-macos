@@ -20,6 +20,10 @@ internal struct CompactForkRelease: Equatable {
     let assetDigest: String
     let pageURL: String
     let publishedAt: Int
+
+    func supersedes(_ workflow: CompactWeeklyWorkflow) -> Bool {
+        self.publishedAt > workflow.startedAt
+    }
 }
 
 internal struct CompactWeeklyWorkflow: Equatable {
@@ -120,8 +124,30 @@ internal final class CompactUpdateMonitor {
             let now = Int(Date().timeIntervalSince1970)
             let age = lastSuccess == 0 ? Int.max : max(0, now - lastSuccess)
             let available = release.map { $0.tag != self.currentTag } ?? false
+            let manualRecovery = release.map { release in
+                workflow.map { $0.failed && release.supersedes($0) } ?? false
+            } ?? false
+
+            if manualRecovery, available, let release {
+                return CompactUpdateSnapshot(
+                    needsAttention: true,
+                    color: .systemGreen,
+                    message: "Manual update available · \(release.tag)",
+                    details: "A successful manual release was published after the failed weekly build. It is ready to install.\n\(release.pageURL)",
+                    showsDetails: true
+                )
+            }
 
             if let workflow, workflow.failed {
+                if manualRecovery, let release {
+                    return CompactUpdateSnapshot(
+                        needsAttention: false,
+                        color: .systemGreen,
+                        message: "Fork is up to date · manual build",
+                        details: "The installed release \(release.tag) supersedes the failed weekly build.\n\(release.pageURL)",
+                        showsDetails: false
+                    )
+                }
                 return CompactUpdateSnapshot(
                     needsAttention: true,
                     color: .systemRed,
@@ -651,8 +677,9 @@ internal final class CompactUpdater {
             guard let self else { return }
             let values = context.values()
 
-            if let workflow = values.workflow, workflow.failed {
-                // A failed Monday run has priority even if no release was produced.
+            if let workflow = values.workflow, workflow.failed,
+               values.release?.supersedes(workflow) != true {
+                // A failed Monday run has priority until a newer public release supersedes it.
                 if let release = values.release {
                     self.expectedLock.withLock { self.expectedByURL[release.assetURL] = release }
                     CompactUpdateMonitor.shared.recordSuccess(release, workflow: workflow)
