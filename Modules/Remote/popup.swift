@@ -135,7 +135,7 @@ internal class Popup: PopupWrapper {
         
         let mi = Dictionary(snapshot.order.machines.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         let hi = Dictionary(snapshot.order.hosts.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        let groupById = Dictionary(uniqueKeysWithValues: snapshot.groups.map { ($0.id, $0) })
+        let groupById = Dictionary(snapshot.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         
         let sortedMachines = enabledMachines.sorted { a, b in
             let ia = mi[a.id] ?? Int.max

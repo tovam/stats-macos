@@ -617,20 +617,20 @@ internal class SMARTReader: Reader<Disks> {
         let data = NSData(bytes: temperatures, length: 2)
         data.getBytes(&temperature, length: 2)
         
-        let dataUnitsRead = self.extractUInt128(smartData.data_units_read)
-        let dataUnitsWritten = self.extractUInt128(smartData.data_units_written)
         let bytesPerDataUnit: Int64 = 512 * 1000
-        
+        let (totalRead, readOverflow) = self.extractUInt128(smartData.data_units_read).multipliedReportingOverflow(by: bytesPerDataUnit)
+        let (totalWritten, writtenOverflow) = self.extractUInt128(smartData.data_units_written).multipliedReportingOverflow(by: bytesPerDataUnit)
+
         let powerCycles = withUnsafeBytes(of: smartData.power_cycles) { $0.load(as: UInt32.self) }
         let powerOnHours = withUnsafeBytes(of: smartData.power_on_hours) { $0.load(as: UInt32.self) }
         let unsafeShutdowns = withUnsafeBytes(of: smartData.unsafe_shutdowns) { $0.load(as: UInt32.self) }
         let mediaErrors = withUnsafeBytes(of: smartData.media_errors) { $0.load(as: UInt32.self) }
         
         return smart_t(
-            temperature: Int(UInt16(bigEndian: temperature) - 273),
-            life: 100 - Int(smartData.percent_used),
-            totalRead: dataUnitsRead * bytesPerDataUnit,
-            totalWritten: dataUnitsWritten * bytesPerDataUnit,
+            temperature: max(0, Int(UInt16(bigEndian: temperature)) - 273),
+            life: max(0, 100 - Int(smartData.percent_used)),
+            totalRead: readOverflow ? Int64.max : totalRead,
+            totalWritten: writtenOverflow ? Int64.max : totalWritten,
             powerCycles: Int(powerCycles),
             powerOnHours: Int(powerOnHours),
             criticalWarning: Int(smartData.critical_warning),

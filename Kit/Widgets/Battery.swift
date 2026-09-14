@@ -413,7 +413,7 @@ public class BatteryWidget: WidgetWrapper {
         
         if updated {
             DispatchQueue.main.async(execute: {
-                self.display()
+                self.needsDisplay = true
             })
         }
     }
@@ -644,7 +644,7 @@ public class BatteryDetailsWidget: WidgetWrapper {
         
         if updated {
             DispatchQueue.main.async(execute: {
-                self.display()
+                self.needsDisplay = true
             })
         }
     }

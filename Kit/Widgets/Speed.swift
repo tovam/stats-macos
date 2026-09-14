@@ -667,7 +667,7 @@ public class SpeedWidget: WidgetWrapper {
         
         if updated {
             DispatchQueue.main.async(execute: {
-                self.display()
+                self.needsDisplay = true
             })
         }
     }
