@@ -223,7 +223,6 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate {
         self.reachability.unreachable = { [weak self] in
             guard let self else { return }
             if self.active {
-                self.getWiFiDetails()
                 self.usage.reset()
                 self.callback(self.usage)
             }
@@ -485,14 +484,11 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate {
     }
     
     private func getWiFiDetails() {
+        guard self.usage.connectionType == .wifi else { return }
+        
         if let interface = CWWiFiClient.shared().interface(withName: self.interfaceID) {
             if let ssid = interface.ssid() {
                 self.usage.wifiDetails.ssid = ssid
-            } else if let cfg = interface.configuration(),
-                      let set = (cfg.value(forKey: "networkProfiles") as? NSOrderedSet),
-                      let first = set.firstObject as? CWNetworkProfile,
-                      let raw = first.ssid, !raw.isEmpty {
-                self.usage.wifiDetails.ssid = raw.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'").trimmingCharacters(in: .whitespacesAndNewlines)
             }
             if let bssid = interface.bssid() {
                 self.usage.wifiDetails.bssid = bssid
@@ -547,16 +543,17 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate {
     
     private func getLocalIP(_ pointer: UnsafeMutablePointer<ifaddrs>) {
         guard let ifaAddr = pointer.pointee.ifa_addr else { return }
-        var addr = ifaAddr.pointee
-        guard addr.sa_family == UInt8(AF_INET) || addr.sa_family == UInt8(AF_INET6) else { return}
+        let family = ifaAddr.pointee.sa_family
+        guard family == UInt8(AF_INET) || family == UInt8(AF_INET6) else { return }
         
         var ip = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-        getnameinfo(&addr, socklen_t(addr.sa_len), &ip, socklen_t(ip.count), nil, socklen_t(0), NI_NUMERICHOST)
+        guard getnameinfo(ifaAddr, socklen_t(ifaAddr.pointee.sa_len), &ip, socklen_t(ip.count), nil, socklen_t(0), NI_NUMERICHOST) == 0 else { return }
         
         let ipStr = String(cString: ip)
-        if addr.sa_family == UInt8(AF_INET) && !ipStr.isEmpty {
+        guard !ipStr.isEmpty else { return }
+        if family == UInt8(AF_INET) {
             self.usage.laddr.v4 = ipStr
-        } else if addr.sa_family == UInt8(AF_INET6) && !ipStr.isEmpty {
+        } else {
             self.usage.laddr.v6 = ipStr
         }
     }
@@ -879,6 +876,8 @@ internal class ConnectivityReader: Reader<Network_Connectivity> {
         set { self.variablesQueue.sync { self._isPinging = newValue } }
     }
     
+    private var _isPreparing: Bool = false
+    
     private var _latency: Double? = nil
     private var latency: Double? {
         get { self.variablesQueue.sync { self._latency } }
@@ -931,9 +930,18 @@ internal class ConnectivityReader: Reader<Network_Connectivity> {
     }
     
     private func prepare() {
+        let shouldPrepare: Bool = self.variablesQueue.sync {
+            if self._isPreparing { return false }
+            self._isPreparing = true
+            return true
+        }
+        guard shouldPrepare else { return }
+        
         DispatchQueue.global(qos: .background).async {
             self.addr = self.resolve()
+            self.closeConn()
             self.openConn()
+            self.variablesQueue.sync { self._isPreparing = false }
             self.read()
         }
     }
@@ -1138,19 +1146,24 @@ internal class ConnectivityReader: Reader<Network_Connectivity> {
         let unmanagedSocketInfo = Unmanaged.passRetained(info)
         self.socketInfo = unmanagedSocketInfo
         var context = CFSocketContext(version: 0, info: unmanagedSocketInfo.toOpaque(), retain: nil, release: nil, copyDescription: nil)
-        self.socket = CFSocketCreate(kCFAllocatorDefault, AF_INET, SOCK_DGRAM, IPPROTO_ICMP, CFSocketCallBackType.dataCallBack.rawValue, { _, callBackType, _, data, info in
+        guard let socket = CFSocketCreate(kCFAllocatorDefault, AF_INET, SOCK_DGRAM, IPPROTO_ICMP, CFSocketCallBackType.dataCallBack.rawValue, { _, callBackType, _, data, info in
             guard let info = info, let data = data else { return }
             if (callBackType as CFSocketCallBackType) == CFSocketCallBackType.dataCallBack {
                 let cfdata = Unmanaged<CFData>.fromOpaque(data).takeUnretainedValue()
                 let wrapper = Unmanaged<ConnectivityReaderWrapper>.fromOpaque(info).takeUnretainedValue()
                 wrapper.reader?.socketCallback(data: cfdata as Data)
             }
-        }, &context)
-        let handle = CFSocketGetNative(self.socket)
+        }, &context) else {
+            unmanagedSocketInfo.release()
+            self.socketInfo = nil
+            return
+        }
+        self.socket = socket
+        let handle = CFSocketGetNative(socket)
         var value: Int32 = 1
         let err = setsockopt(handle, SOL_SOCKET, SO_NOSIGPIPE, &value, socklen_t(MemoryLayout.size(ofValue: value)))
         guard err == 0 else { return }
-        self.socketSource = CFSocketCreateRunLoopSource(nil, self.socket, 0)
+        self.socketSource = CFSocketCreateRunLoopSource(nil, socket, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), self.socketSource, .commonModes)
     }
     
