@@ -290,6 +290,24 @@ private extension NSLock {
 }
 
 internal final class ForkSettingsView: NSStackView {
+    static let sidebarTitle = "Fork"
+    static var sidebarIcon: NSImage? {
+        NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
+    }
+
+    static func visibleModules(_ list: [Module]) -> [Module] {
+        list.filter { $0.config.name != ModuleType.remote.stringValue }
+    }
+
+    // Upstream owns reader visibility. Selecting a non-module page only clears
+    // the active module; SettingsWindow publishes the resulting state once.
+    func selectPage(_ title: String, activeModule: inout String?, controls: [NSView?]) -> NSView? {
+        guard title == Self.sidebarTitle else { return nil }
+        activeModule = nil
+        controls.forEach { $0?.isHidden = true }
+        return self
+    }
+
     private let repositoryURL = URL(string: "https://github.com/tovam/stats-macos")!
     private var updateWindow: UpdateWindow?
 

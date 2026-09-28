@@ -96,7 +96,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(menuCallback), name: .openModuleSettings, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(externalModuleToggle), name: .toggleModule, object: nil)
         
-        self.sidebarView.setModules(modules.filter { $0.config.name != ModuleType.remote.stringValue })
+        self.sidebarView.setModules(ForkSettingsView.visibleModules(modules))
         self.sidebarView.openMenu("Dashboard")
     }
     
@@ -231,11 +231,11 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
                 view = self.settings
                 self.toggleButton?.isHidden = true
                 self.settingsPreviewButton?.isHidden = true
-            } else if title == "Fork" {
-                self.activeModuleName = nil
-                view = self.forkSettings
-                self.toggleButton?.isHidden = true
-                self.settingsPreviewButton?.isHidden = true
+            }
+
+            if let forkView = self.forkSettings.selectPage(title, activeModule: &self.activeModuleName,
+                                                          controls: [self.toggleButton, self.settingsPreviewButton]) {
+                view = forkView
             }
             
             self.title = localizedString(title)
@@ -342,7 +342,6 @@ private class SidebarView: NSStackView {
     }
     
     private var dashboardIcon: NSImage { NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: nil)! }
-    private var forkIcon: NSImage { NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)! }
     private var settingsIcon: NSImage { iconFromSymbol(name: "gear", scale: .large) }
     private var bugIcon: NSImage { iconFromSymbol(name: "ladybug", scale: .large) }
     private var supportIcon: NSImage { iconFromSymbol(name: "heart.fill", scale: .large) }
@@ -365,7 +364,7 @@ private class SidebarView: NSStackView {
         
         self.scrollView.stackView.addArrangedSubview(MenuItem(icon: self.dashboardIcon, title: "Dashboard"))
         self.scrollView.stackView.addArrangedSubview(spacer)
-        self.scrollView.stackView.addArrangedSubview(MenuItem(icon: self.forkIcon, title: "Fork"))
+        self.scrollView.stackView.addArrangedSubview(MenuItem(icon: ForkSettingsView.sidebarIcon, title: ForkSettingsView.sidebarTitle))
         
         self.supportPopover.behavior = .transient
         self.supportPopover.contentViewController = self.supportView()

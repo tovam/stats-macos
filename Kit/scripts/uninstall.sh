@@ -2,8 +2,8 @@
 
 set -u
 
-HELPER_LABEL="com.tovam.StatsCompact.SMC.Helper"
-AGENT_LABEL="com.tovam.StatsCompact"
+HELPER_LABEL="eu.exelban.Stats.SMC.Helper"
+AGENT_LABEL="eu.exelban.Stats"
 
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
     HOME=$(dscl . -read "/Users/$SUDO_USER" NFSHomeDirectory | awk '{print $2}')
@@ -17,9 +17,9 @@ run_as_user() {
     fi
 }
 
-echo "Uninstalling Stats Compact..."
+echo "Uninstalling Stats..."
 
-run_as_user osascript -e 'quit app "Stats Compact"' >/dev/null 2>&1 || true
+run_as_user osascript -e 'quit app "Stats"' >/dev/null 2>&1 || true
 
 echo "Removing the launch agent..."
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
@@ -36,7 +36,7 @@ sudo launchctl unload "/Library/LaunchDaemons/$HELPER_LABEL.plist" 2>/dev/null |
 sudo rm -f "/Library/LaunchDaemons/$HELPER_LABEL.plist"
 sudo rm -f "/Library/PrivilegedHelperTools/$HELPER_LABEL"
 
-for app in "/Applications/Stats Compact.app" "$HOME/Applications/Stats Compact.app"; do
+for app in "/Applications/Stats.app" "$HOME/Applications/Stats.app"; do
     if [ -d "$app" ]; then
         echo "Removing $app..."
         sudo rm -rf "$app"
@@ -47,13 +47,13 @@ echo "Removing application data and preferences..."
 echo "Removing the System Stats authorization..."
 run_as_user security delete-generic-password -s "${AGENT_LABEL}.remote" -a access_token 2>/dev/null || true
 run_as_user security delete-generic-password -s "${AGENT_LABEL}.remote" -a refresh_token 2>/dev/null || true
-rm -rf "$HOME/Library/Application Support/Stats Compact"
-rm -rf "$HOME/Library/Containers/com.tovam.StatsCompact.Widgets"
-rm -rf "$HOME/Library/Group Containers/"*.com.tovam.StatsCompact.widgets
-run_as_user defaults delete com.tovam.StatsCompact >/dev/null 2>&1 || true
-run_as_user defaults delete com.tovam.StatsCompact.Widgets >/dev/null 2>&1 || true
-rm -f "$HOME/Library/Preferences/com.tovam.StatsCompact.plist"
-rm -f "$HOME/Library/Preferences/com.tovam.StatsCompact.Widgets.plist"
+rm -rf "$HOME/Library/Application Support/Stats"
+rm -rf "$HOME/Library/Containers/eu.exelban.Stats.Widgets"
+rm -rf "$HOME/Library/Group Containers/"*.eu.exelban.Stats.widgets
+run_as_user defaults delete eu.exelban.Stats >/dev/null 2>&1 || true
+run_as_user defaults delete eu.exelban.Stats.Widgets >/dev/null 2>&1 || true
+rm -f "$HOME/Library/Preferences/eu.exelban.Stats.plist"
+rm -f "$HOME/Library/Preferences/eu.exelban.Stats.Widgets.plist"
 
-echo "Stats Compact has been uninstalled."
+echo "Stats has been uninstalled."
 echo "If fan speeds were controlled manually, they will return to automatic control after a reboot."

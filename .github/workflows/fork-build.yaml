@@ -1,0 +1,154 @@
+name: Stats Compact build
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or branch to build
+        required: false
+        type: string
+        default: ""
+      publish_release:
+        description: Publish Stats-Compact.app.zip as a public GitHub Release
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish Stats-Compact.app.zip as a public GitHub Release
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+concurrency:
+  group: stats-compact-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'tovam/stats-macos'
+    runs-on: macos-15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Test fork integration
+        run: ruby Fork/tests/integration_test.rb
+      - name: Build application
+        id: build_application
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme Stats \
+            -destination 'platform=macOS' \
+            -configuration Release \
+            -derivedDataPath build \
+            build \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee xcodebuild.log
+      - name: Stamp fork release metadata
+        id: release_metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_plist="build/Build/Products/Release/Stats Compact.app/Contents/Info.plist"
+          test -f "$app_plist"
+
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          resolved_sha="$(git rev-parse HEAD)"
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_plist")"
+          test -n "$version"
+          tag="v${version}-statscompact.${GITHUB_RUN_ID}"
+
+          /usr/libexec/PlistBuddy -c "Delete :CompactReleaseTag" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactBuildSHA" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactBuildDate" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CompactReleaseRepository" "$app_plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CompactReleaseTag string $tag" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactBuildSHA string $resolved_sha" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactBuildDate string $build_date" "$app_plist"
+          /usr/libexec/PlistBuddy -c "Add :CompactReleaseRepository string tovam/stats-macos" "$app_plist"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$resolved_sha" >> "$GITHUB_OUTPUT"
+      - name: Validate auto-update bundle
+        shell: bash
+        run: |
+          bash Fork/verify-release.sh \
+            "build/Build/Products/Release/Stats Compact.app" \
+            "${{ steps.release_metadata.outputs.tag }}" \
+            "${{ steps.release_metadata.outputs.sha }}"
+      - name: Report build errors
+        if: ${{ failure() && steps.build_application.outcome == 'failure' }}
+        shell: bash
+        run: |
+          grep -E 'error:|BUILD FAILED' xcodebuild.log | head -50 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+      - name: Upload build log
+        if: ${{ failure() && steps.build_application.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xcode-build-log
+          path: xcodebuild.log
+          if-no-files-found: error
+      - name: Package application
+        run: >-
+          ditto -c -k --keepParent
+          "build/Build/Products/Release/Stats Compact.app"
+          build/Stats-Compact.app.zip
+      - name: Upload application
+        uses: actions/upload-artifact@v7
+        with:
+          name: Stats-Compact-macOS
+          path: build/Stats-Compact.app.zip
+          if-no-files-found: error
+      - name: Publish public release
+        if: ${{ inputs.publish_release || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')) }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release_metadata.outputs.sha }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          short_sha="${RELEASE_SHA:0:7}"
+          gh release create "$RELEASE_TAG" \
+            "build/Stats-Compact.app.zip#Stats-Compact.app.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "Stats Compact ${RELEASE_TAG}" \
+            --notes "Successful Stats Compact build. Upstream base: Stats ${RELEASE_VERSION}. Fork commit: ${short_sha}. Workflow run: ${GITHUB_RUN_ID}." \
+            --latest
+      - name: Tag successful build
+        if: ${{ always() && !cancelled() && steps.build_application.outcome == 'success' && steps.release_metadata.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_SHA: ${{ steps.release_metadata.outputs.sha }}
+          BUILD_TAG: ${{ steps.release_metadata.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${BUILD_TAG}" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$existing_sha" != "$BUILD_SHA" ]]; then
+              echo "::error title=Build tag collision::${BUILD_TAG} already points to ${existing_sha}, expected ${BUILD_SHA}."
+              exit 1
+            fi
+            echo "Build tag ${BUILD_TAG} already exists on ${BUILD_SHA}."
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${BUILD_TAG}" \
+              -f sha="$BUILD_SHA"
+          fi

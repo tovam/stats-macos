@@ -626,7 +626,7 @@
 		5CFE493829265055000F2856 /* protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = protocol.swift; sourceTree = "<group>"; };
 		5CFE493A292650BD000F2856 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5CFE493B292650F8000F2856 /* Launchd.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Launchd.plist; sourceTree = "<group>"; };
-		5CFE494129265418000F2856 /* uninstall.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = uninstall.sh; sourceTree = "<group>"; };
+		5CFE494129265418000F2856 /* uninstall.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; name = uninstall.sh; path = compact/uninstall.sh; sourceTree = "<group>"; };
 		5CFE494329265421000F2856 /* changelog.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = changelog.py; sourceTree = "<group>"; };
 		5E0C63472FBDB7DE00D9BA3E /* Remote.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Remote.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E0C635A2FBDB82300D9BA3E /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };

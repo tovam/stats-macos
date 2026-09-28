@@ -49,7 +49,7 @@ jobs:
 
   build-and-release:
     needs: sync
-    uses: ./.github/workflows/build.yaml
+    uses: ./.github/workflows/fork-build.yaml
     with:
       ref: ${{ needs.sync.outputs.sha }}
       publish_release: true
