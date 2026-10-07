@@ -166,6 +166,7 @@
 "Pause the Stats" = "Peata Stats";
 "Resume the Stats" = "Jätka Stats";
 "Combined modules" = "Kombineeritud moodulid";
+"Show icon instead of widgets" = "Näita vidinate asemel ikooni";
 "Combined details" = "Ühendatud andmed";
 "Spacing" = "Vahekaugus";
 "Choose file" = "Vali fail";
@@ -412,6 +413,8 @@
 "Sensor to show" = "Sensor näitamiseks";
 
 // Network
+"Allow access to Wi-Fi details" = "Luba ligipääs Wi-Fi üksikasjadele";
+"Open Location Settings" = "Ava asukoha seaded";
 "Uploading" = "Üleslaadimine";
 "Downloading" = "Allalaadimine";
 "Public IP" = "Avalik IP";

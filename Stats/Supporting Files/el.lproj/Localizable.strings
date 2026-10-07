@@ -166,6 +166,7 @@
 "Pause the Stats" = "Παύση του Stats";
 "Resume the Stats" = "Ξαναρχίζω το Stats";
 "Combined modules" = "Συνένωση ενοτήτων";
+"Show icon instead of widgets" = "Εμφάνιση εικονιδίου αντί για widgets";
 "Combined details" = "Συνδυασμένες λεπτομέρειες"; // gemma4:31b
 "Spacing" = "Κενό";
 "Choose file" = "Επιλογή αρχείου"; // gemma4:31b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Αισθητήρας προς εμφάνιση"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Επιτρέψτε την πρόσβαση σε λεπτομέρειες Wi-Fi";
+"Open Location Settings" = "Άνοιγμα ρυθμίσεων τοποθεσίας";
 "Uploading" = "Μεταφόρτωση";
 "Downloading" = "Λήψη";
 "Public IP" = "Δημόσια IP";

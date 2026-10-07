@@ -166,6 +166,7 @@
 "Pause the Stats" = "Pausar o Stats";
 "Resume the Stats" = "Resumir o Stats";
 "Combined modules" = "Módulos combinados";
+"Show icon instead of widgets" = "Mostrar ícone em vez de widgets";
 "Combined details" = "Detalhes combinados"; // translategemma:4b
 "Spacing" = "Espaçamento";
 "Choose file" = "Escolher ficheiro"; // translategemma:4b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Sensor a mostrar"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Permitir acesso aos detalhes do Wi-Fi";
+"Open Location Settings" = "Abrir definições de localização";
 "Uploading" = "Enviando";
 "Downloading" = "Descarregando";
 "Public IP" = "IP Público";

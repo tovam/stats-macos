@@ -166,6 +166,7 @@
 "Pause the Stats" = "Stats pausieren";
 "Resume the Stats" = "Stats fortsetzen";
 "Combined modules" = "Kombinierte Module";
+"Show icon instead of widgets" = "Symbol statt Widgets anzeigen";
 "Combined details" = "Kombinierte Details";
 "Spacing" = "Abstand";
 "Choose file" = "Datei auswählen";
@@ -412,6 +413,8 @@
 "Sensor to show" = "Anzuzeigender Sensor";
 
 // Network
+"Allow access to Wi-Fi details" = "Zugriff auf Wi-Fi-Details erlauben";
+"Open Location Settings" = "Ortungseinstellungen öffnen";
 "Uploading" = "Hochladen"; // translategemma:4b
 "Downloading" = "Herunterladen"; // translategemma:4b
 "Public IP" = "Öffentliche IP";

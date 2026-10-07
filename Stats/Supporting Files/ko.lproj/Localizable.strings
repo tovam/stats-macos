@@ -166,6 +166,7 @@
 "Pause the Stats" = "Stats 일시정지";
 "Resume the Stats" = "Stats 재개";
 "Combined modules" = "전체 모듈";
+"Show icon instead of widgets" = "위젯 대신 아이콘 표시";
 "Combined details" = "전체 세부 정보";
 "Spacing" = "간격";
 "Choose file" = "파일 선택";
@@ -412,6 +413,8 @@
 "Sensor to show" = "표시할 센서";
 
 // Network
+"Allow access to Wi-Fi details" = "Wi-Fi 상세 정보에 대한 액세스 허용";
+"Open Location Settings" = "위치 설정 열기";
 "Uploading" = "업로드";
 "Downloading" = "다운로드";
 "Public IP" = "공개 IP";

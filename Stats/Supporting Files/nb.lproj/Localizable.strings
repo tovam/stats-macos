@@ -166,6 +166,7 @@
 "Pause the Stats" = "Sett Stats på pause";
 "Resume the Stats" = "Gjenoppta Stats";
 "Combined modules" = "Kombinerte moduler";
+"Show icon instead of widgets" = "Vis ikon i stedet for widgeter";
 "Combined details" = "Kombinerte detaljer"; // gemma4:31b
 "Spacing" = "Mellomrom";
 "Choose file" = "Velg fil"; // translategemma:4b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Sensor som skal vises"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Tillat tilgang til Wi-Fi detaljer";
+"Open Location Settings" = "Åpne posisjonsinnstillinger";
 "Uploading" = "Opplasting";
 "Downloading" = "Nedlasting";
 "Public IP" = "Offentlig IP";

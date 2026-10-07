@@ -166,6 +166,7 @@
 "Pause the Stats" = "Jeda Stats"; // gemma4:31b
 "Resume the Stats" = "Lanjutkan Stats"; // gemma4:31b
 "Combined modules" = "Modul gabungan"; // gemma4:31b
+"Show icon instead of widgets" = "Tampilkan ikon sebagai pengganti widget";
 "Combined details" = "Detail gabungan"; // gemma4:31b
 "Spacing" = "Jarak"; // translategemma:4b
 "Choose file" = "Pilih file"; // translategemma:4b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Sensor yang ditampilkan"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Izinkan akses ke detail Wi-Fi";
+"Open Location Settings" = "Buka pengaturan lokasi";
 "Uploading" = "Unggah";
 "Downloading" = "Unduh";
 "Public IP" = "IP Publik";

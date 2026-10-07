@@ -166,6 +166,7 @@
 "Pause the Stats" = "Призупинити Stats";
 "Resume the Stats" = "Відновити Stats";
 "Combined modules" = "Комбіновані модулі";
+"Show icon instead of widgets" = "Показувати іконку замість віджетів";
 "Combined details" = "Комбіновані деталі";
 "Spacing" = "Інтервал";
 "Choose file" = "Виберіть файл";
@@ -412,6 +413,8 @@
 "Sensor to show" = "Активний датчик";
 
 // Network
+"Allow access to Wi-Fi details" = "Дозволити доступ до деталей Wi-Fi";
+"Open Location Settings" = "Відкрити налаштування геолокації";
 "Uploading" = "Висилання";
 "Downloading" = "Завантаження";
 "Public IP" = "Публічний IP";

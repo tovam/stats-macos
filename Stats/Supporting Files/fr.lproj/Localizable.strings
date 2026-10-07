@@ -166,6 +166,7 @@
 "Pause the Stats" = "Mettre Stats en pause";
 "Resume the Stats" = "Reprendre Stats";
 "Combined modules" = "Modules combinés";
+"Show icon instead of widgets" = "Afficher l’icône à la place des widgets";
 "Combined details" = "Détails combinés";
 "Spacing" = "Espacement";
 "Choose file" = "Choisir un fichier"; // gemma4:31b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Capteur à afficher"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Autoriser l'accès aux détails Wi-Fi";
+"Open Location Settings" = "Ouvrir les paramètres de localisation";
 "Uploading" = "Envoi";
 "Downloading" = "Téléchargement";
 "Public IP" = "IP publique";

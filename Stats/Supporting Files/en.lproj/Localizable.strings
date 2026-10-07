@@ -166,6 +166,7 @@
 "Pause the Stats" = "Pause the Stats";
 "Resume the Stats" = "Resume the Stats";
 "Combined modules" = "Combined modules";
+"Show icon instead of widgets" = "Show icon instead of widgets";
 "Combined details" = "Combined details";
 "Spacing" = "Spacing";
 "Choose file" = "Choose file";
@@ -412,6 +413,8 @@
 "Sensor to show" = "Sensor to show";
 
 // Network
+"Allow access to Wi-Fi details" = "Allow access to Wi-Fi details";
+"Open Location Settings" = "Open Location Settings";
 "Uploading" = "Upload";
 "Downloading" = "Download";
 "Public IP" = "Public IP";

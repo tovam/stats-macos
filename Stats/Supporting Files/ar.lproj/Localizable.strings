@@ -166,6 +166,7 @@
 "Pause the Stats" = "إيقاف الإحصاءات";
 "Resume the Stats" = "استئناف الإحصاءات";
 "Combined modules" = "الوحدات المجتمعة";
+"Show icon instead of widgets" = "إظهار الأيقونة بدلاً من عناصر الواجهة";
 "Combined details" = "تفاصيل مجمعة"; // translategemma:4b
 "Spacing" = "التباعد";
 "Choose file" = "اختيار ملف"; // gemma4:31b
@@ -412,6 +413,8 @@
 "Sensor to show" = "المستشعر المراد عرضه"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "السماح بالوصول إلى تفاصيل Wi-Fi";
+"Open Location Settings" = "فتح إعدادات الموقع";
 "Uploading" = "رفع";
 "Downloading" = "تنزيل";
 "Public IP" = "عنوان IP العام";

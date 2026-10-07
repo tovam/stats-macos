@@ -166,6 +166,7 @@
 "Pause the Stats" = "השהה את Stats"; // gemma4:31b
 "Resume the Stats" = "המשך את Stats"; // gemma4:31b
 "Combined modules" = "מודולים משולבים"; // translategemma:4b
+"Show icon instead of widgets" = "הצגת סמל במקום ווידג׳טים";
 "Combined details" = "פרטים משולבים"; // translategemma:4b
 "Spacing" = "רווח"; // gemma4:31b
 "Choose file" = "בחר קובץ"; // translategemma:4b
@@ -412,6 +413,8 @@
 "Sensor to show" = "חיישן להצגה"; // translategemma:4b
 
 // Network
+"Allow access to Wi-Fi details" = "הרש/י גישה לפרטי Wi-Fi";
+"Open Location Settings" = "פתח/י הגדרות מיקום";
 "Uploading" = "העלאה";
 "Downloading" = "הורדה";
 "Public IP" = "כתובת רשת ציבורית";

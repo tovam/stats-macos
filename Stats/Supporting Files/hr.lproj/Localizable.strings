@@ -166,6 +166,7 @@
 "Pause the Stats" = "Pauziraj Stats"; // gemma4:31b
 "Resume the Stats" = "Nastavi Stats"; // gemma4:31b
 "Combined modules" = "Kombinirani moduli"; // gemma4:31b
+"Show icon instead of widgets" = "Prikaži ikonu umjesto widgeta";
 "Combined details" = "Kombinirani detalji"; // gemma4:31b
 "Spacing" = "Razmak"; // translategemma:4b
 "Choose file" = "Odaberi datoteku"; // gemma4:31b
@@ -412,6 +413,8 @@
 "Sensor to show" = "Senzor za prikaz"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Dozvoli pristup detaljima Wi-Fi-ja";
+"Open Location Settings" = "Otvori postavke lokacije";
 "Uploading" = "Slanje";
 "Downloading" = "Primanje";
 "Public IP" = "Javni IP";

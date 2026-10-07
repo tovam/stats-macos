@@ -166,6 +166,7 @@
 "Pause the Stats" = "Stats-ஐ நிறுத்து";
 "Resume the Stats" = "Stats-ஐ மீண்டும் தொடங்கு";
 "Combined modules" = "ஒன்றிணைக்கப்பட்ட தொகுதிகள்";
+"Show icon instead of widgets" = "விட்ஜெட்டுகளுக்குப் பதிலாக ஐகானைக் காட்டு";
 "Combined details" = "ஒன்றிணைக்கப்பட்ட விவரங்கள்";
 "Spacing" = "விடைவெளி";
 "Choose file" = "கோப்பைத் தேர்ந்தெடு";
@@ -412,6 +413,8 @@
 "Sensor to show" = "காட்ட உணரி";
 
 // Network
+"Allow access to Wi-Fi details" = "Wi-Fi விவரங்களுக்கான அணுகலை அனுமதி";
+"Open Location Settings" = "இட அமைப்புகளைத் திற";
 "Uploading" = "பதிவேற்றம்";
 "Downloading" = "பதிவிறக்கம்";
 "Public IP" = "பொது IP"; // qwen3.8:27b

@@ -166,6 +166,7 @@
 "Pause the Stats" = "आँकड़ों को रोकें";
 "Resume the Stats" = "आँकड़े फिर से शुरू करें";
 "Combined modules" = "संयुक्त मॉड्यूल";
+"Show icon instead of widgets" = "विजेट के बजाय आइकन दिखाएँ";
 "Combined details" = "संयुक्त विवरण"; // translategemma:4b
 "Spacing" = "स्पेसिंग";
 "Choose file" = "फ़ाइल चुनें"; // translategemma:4b
@@ -412,6 +413,8 @@
 "Sensor to show" = "दिखाने के लिए सेंसर"; // gemma4:31b
 
 // Network
+"Allow access to Wi-Fi details" = "Wi-Fi विवरण तक पहुंच की अनुमति दें";
+"Open Location Settings" = "लोकेशन सेटिंग्स खोलें";
 "Uploading" = "अपलोड";
 "Downloading" = "डाउनलोड";
 "Public IP" = "सार्वजनिक आईपी";

@@ -166,6 +166,7 @@
 "Pause the Stats" = "Stats বিরতি দিন";
 "Resume the Stats" = "Stats পুনরায় শুরু করুন";
 "Combined modules" = "সম্মিলিত মডিউল";
+"Show icon instead of widgets" = "উইজেটের পরিবর্তে আইকন দেখান";
 "Combined details" = "সম্মিলিত বিবরণ";
 "Spacing" = "ব্যবধান";
 "Choose file" = "ফাইল নির্বাচন করুন";
@@ -412,6 +413,8 @@
 "Sensor to show" = "দেখানোর জন্য সেন্সর";
 
 // Network
+"Allow access to Wi-Fi details" = "Wi-Fi বিবরণে অ্যাক্সেস অনুমতি দিন";
+"Open Location Settings" = "লোকেশন সেটিংস খুলুন";
 "Uploading" = "আপলোড";
 "Downloading" = "ডাউনলোড";
 "Public IP" = "পাবলিক IP";

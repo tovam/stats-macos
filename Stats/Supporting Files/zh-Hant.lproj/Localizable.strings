@@ -166,6 +166,7 @@
 "Pause the Stats" = "暫停Stats";
 "Resume the Stats" = "恢復Stats";
 "Combined modules" = "合併模組";
+"Show icon instead of widgets" = "顯示圖示而非小工具";
 "Combined details" = "合併詳細資訊";
 "Spacing" = "間距";
 "Choose file" = "選擇檔案";
@@ -412,6 +413,8 @@
 "Sensor to show" = "要顯示的感知器";
 
 // Network
+"Allow access to Wi-Fi details" = "允許存取 Wi-Fi 詳細資訊";
+"Open Location Settings" = "打開位置設定";
 "Uploading" = "上傳";
 "Downloading" = "下載";
 "Public IP" = "公用IP";
