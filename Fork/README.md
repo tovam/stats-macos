@@ -30,6 +30,6 @@ Preserve all of these when changing builds:
 - `Contents/Resources/Scripts/updater.sh` is the fork updater. Do not replace it with the upstream DMG updater.
 - Keep `sync-upstream.yaml` named as-is: installed apps query its scheduled runs for weekly health. A newer public release supersedes an earlier weekly failure.
 
-`Fork/verify-release.sh` enforces the bundle contract before packaging and publication, including byte-for-byte comparison with both fork scripts. `ruby Fork/tests/integration_test.rb` tests the publisher wiring, rejects mismatched synthetic bundles, and checks the fork uninstaller using an explicit dry run. Tests only create temporary fixtures inside this repository; they never inspect an installed app or user data.
+`Fork/verify-release.sh` enforces the bundle contract before packaging and publication, including byte-for-byte comparison with both fork scripts. `ruby Fork/tests/integration_test.rb` tests the publisher wiring, rejects mismatched synthetic bundles, and checks the fork uninstaller using an explicit dry run. The publisher also requires upstream's `make test-smc` to pass before building; the separate, path-filtered SMC workflow alone is not a release gate. Tests only create temporary fixtures inside this repository; they never inspect an installed app or user data.
 
 This reduces conflict-prone edits; it cannot guarantee conflict-free merges when upstream changes the surrounding APIs or lifecycle. After a merge, also check CPU → Fork → closed/minimized settings and the combined popup's reader visibility.

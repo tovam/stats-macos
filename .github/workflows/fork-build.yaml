@@ -47,6 +47,10 @@ jobs:
         run: |
           ruby Fork/tests/integration_test.rb
           ruby Fork/tests/upstream_sync_test.rb
+      - name: Test SMC lifecycle
+        run: |
+          mkdir -p build
+          TMPDIR="$PWD/build" make test-smc
       - name: Build application
         id: build_application
         shell: bash

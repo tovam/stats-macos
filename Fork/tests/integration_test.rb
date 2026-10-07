@@ -25,6 +25,7 @@ class ForkIntegrationTest < Minitest::Test
     end
     assert_equal ['master'], triggers['push']['branches']
     steps = build['jobs']['build']['steps'].map { |step| step['name'] }
+    assert_operator steps.index('Test SMC lifecycle'), :<, steps.index('Build application')
     assert_operator steps.index('Validate auto-update bundle'), :<, steps.index('Publish public release')
     assert_operator steps.index('Package application'), :<, steps.index('Publish public release')
   end
