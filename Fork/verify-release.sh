@@ -27,6 +27,6 @@ assert_value CompactReleaseRepository tovam/stats-macos
 assert_value CompactReleaseTag "$release_tag"
 assert_value CompactBuildSHA "$release_sha"
 test -x "$release_app/Contents/MacOS/Stats Compact"
-cmp Kit/scripts/updater.sh "$release_app/Contents/Resources/Scripts/updater.sh"
+cmp Kit/scripts/compact/updater.sh "$release_app/Contents/Resources/Scripts/updater.sh"
 cmp Kit/scripts/compact/uninstall.sh "$release_app/Contents/Resources/Scripts/uninstall.sh"
 echo "Auto-update bundle validated: $release_tag ($release_sha)"

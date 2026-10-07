@@ -37,6 +37,28 @@ class ForkIntegrationTest < Minitest::Test
     refute_equal upstream['concurrency']['group'], fork['concurrency']['group']
   end
 
+  def test_upstream_release_cannot_publish_in_the_fork
+    release = workflow('release.yaml')
+    assert_equal "github.repository == 'exelban/stats'", release['jobs']['release']['if']
+  end
+
+  def test_weekly_sync_uses_the_tested_workflow_preservation_policy
+    steps = workflow('sync-upstream.yaml')['jobs']['sync']['steps']
+    test_step = steps.find { |step| step['name'] == 'Test upstream sync policy' }
+    merge = steps.find { |step| step['name'] == 'Merge upstream master' }
+    push = steps.find { |step| step['name'] == 'Push merged master' }
+    assert_includes test_step['run'], 'ruby Fork/tests/upstream_sync_test.rb'
+    assert_includes merge['run'], 'bash Fork/sync-upstream.sh FETCH_HEAD'
+    assert_includes push['run'], '::error title=Upstream push failed::'
+  end
+
+  def test_xcode_packages_the_fork_specific_scripts
+    project = File.read(File.join(ROOT, 'Stats.xcodeproj/project.pbxproj'))
+    %w[updater.sh uninstall.sh].each do |script|
+      assert_includes project, "name = #{script}; path = compact/#{script};"
+    end
+  end
+
   def with_bundle(overrides = {})
     # All fixture files are generated under the project. No installed app,
     # preferences, caches, Keychain or home directory is accessed.
@@ -57,7 +79,7 @@ class ForkIntegrationTest < Minitest::Test
       executable = File.join(app, 'Contents/MacOS/Stats Compact')
       File.write(executable, "#!/bin/sh\nexit 0\n")
       File.chmod(0o755, executable)
-      FileUtils.cp(File.join(ROOT, 'Kit/scripts/updater.sh'), File.join(scripts, 'updater.sh'))
+      FileUtils.cp(File.join(ROOT, 'Kit/scripts/compact/updater.sh'), File.join(scripts, 'updater.sh'))
       FileUtils.cp(File.join(ROOT, 'Kit/scripts/compact/uninstall.sh'), File.join(scripts, 'uninstall.sh'))
       yield app
     end

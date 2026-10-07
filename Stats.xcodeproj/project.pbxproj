@@ -675,7 +675,7 @@
 		9A2847762666AA5000EC1F6D /* popup.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = popup.swift; sourceTree = "<group>"; };
 		9A2847772666AA5000EC1F6D /* reader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = reader.swift; sourceTree = "<group>"; };
 		9A2847782666AA5000EC1F6D /* widget.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = widget.swift; sourceTree = "<group>"; };
-		9A2848012666AB2F00EC1F6D /* updater.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = updater.sh; sourceTree = "<group>"; };
+		9A2848012666AB2F00EC1F6D /* updater.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; name = updater.sh; path = compact/updater.sh; sourceTree = "<group>"; };
 		9A2848022666AB2F00EC1F6D /* Store.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		9A2848032666AB2F00EC1F6D /* SystemKit.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SystemKit.swift; sourceTree = "<group>"; };
 		9A2848042666AB2F00EC1F6D /* Charts.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Charts.swift; sourceTree = "<group>"; };

@@ -25,6 +25,9 @@ jobs:
           ref: master
           fetch-depth: 0
 
+      - name: Test upstream sync policy
+        run: ruby Fork/tests/upstream_sync_test.rb
+
       - name: Merge upstream master
         shell: bash
         run: |
@@ -33,14 +36,24 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --no-tags https://github.com/exelban/stats.git master
 
-          if ! git merge --no-edit FETCH_HEAD; then
-            echo "::error title=Upstream merge conflict::Resolve the conflicts on master, then run this workflow again."
-            git diff --name-only --diff-filter=U
-            exit 1
-          fi
+          bash Fork/sync-upstream.sh FETCH_HEAD
 
       - name: Push merged master
-        run: git push origin HEAD:master
+        shell: bash
+        run: |
+          set -euo pipefail
+          if push_output="$(git push origin HEAD:master 2>&1)"; then
+            printf '%s\n' "$push_output"
+          else
+            printf '%s\n' "$push_output"
+            # Surface Git's actual reason in the public annotations, not just
+            # in the authenticated job log (permissions, rejected push, etc.).
+            message="${push_output//'%'/'%25'}"
+            message="${message//$'\r'/'%0D'}"
+            message="${message//$'\n'/'%0A'}"
+            echo "::error title=Upstream push failed::$message"
+            exit 1
+          fi
 
       - name: Select revision to build
         id: result

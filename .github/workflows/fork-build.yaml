@@ -44,7 +44,9 @@ jobs:
           ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           persist-credentials: false
       - name: Test fork integration
-        run: ruby Fork/tests/integration_test.rb
+        run: |
+          ruby Fork/tests/integration_test.rb
+          ruby Fork/tests/upstream_sync_test.rb
       - name: Build application
         id: build_application
         shell: bash
