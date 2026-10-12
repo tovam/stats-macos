@@ -41,15 +41,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     internal var settingsWindow: SettingsWindow?
     internal var updateWindow: UpdateWindow?
     internal var setupWindow: SetupWindow?
-    internal var supportWindow: SupportWindow?
     
     internal var menuBarItem: NSStatusItem? = nil
     internal var combinedView: CompactCombinedView = CompactCombinedView()
     internal var modulesMounted: Bool = false
     
     internal let updateActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.updateCheck")
-    internal let supportActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.support")
-    internal let supportRetryActivity = NSBackgroundActivityScheduler(identifier: "com.tovam.StatsCompact.supportRetry")
     
     internal var clickInNotification: Bool = false
     
@@ -86,9 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForAppPause), name: .pause, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleToggleSettings), name: .toggleSettings, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleRemoteAuthenticated), name: .remoteAuthenticated, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleRemoteUpdate), name: .remoteUpdate, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePopupVisibility), name: .popupVisibilityChanged, object: nil)
         
         NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             self?.handleKeyEvent(event)
@@ -133,22 +128,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         self.ensureSettingsWindow().open(module: module)
     }
     
-    @objc private func handleRemoteAuthenticated() {
-        DispatchQueue.main.async {
-            self.checkIfShouldShowSupportWindow()
-        }
-    }
-    
     @objc private func handleRemoteUpdate() {
         DispatchQueue.main.async {
             self.checkForNewVersion(silent: true)
-        }
-    }
-    
-    @objc private func handlePopupVisibility(_ notification: Notification) {
-        guard let state = notification.userInfo?["state"] as? Bool, !state else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.tryToShowSupportWindow(interaction: true)
         }
     }
     
@@ -162,10 +144,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     internal func ensureSettingsWindow() -> SettingsWindow {
         if let w = self.settingsWindow { return w }
         let w = SettingsWindow()
-        w.onClose = { [weak self] in
-            self?.settingsWindow = nil
-            self?.tryToShowSupportWindow(interaction: true)
-        }
+        w.onClose = { [weak self] in self?.settingsWindow = nil }
         self.settingsWindow = w
         return w
     }
@@ -183,14 +162,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let w = SetupWindow()
         w.onClose = { [weak self] in self?.setupWindow = nil }
         self.setupWindow = w
-        return w
-    }
-    
-    internal func ensureSupportWindow() -> SupportWindow {
-        if let w = self.supportWindow { return w }
-        let w = SupportWindow()
-        w.onClose = { [weak self] in self?.supportWindow = nil }
-        self.supportWindow = w
         return w
     }
     
