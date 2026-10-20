@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: ""
+      build_channel:
+        description: Short tag namespace for the caller's build counter
+        required: false
+        type: string
+        default: c
       publish_release:
         description: Publish Stats-Compact.app.zip as a public GitHub Release
         required: false
@@ -66,6 +71,8 @@ jobs:
       - name: Stamp fork release metadata
         id: release_metadata
         shell: bash
+        env:
+          BUILD_CHANNEL: ${{ inputs.build_channel || 'c' }}
         run: |
           set -euo pipefail
           app_plist="build/Build/Products/Release/Stats Compact.app/Contents/Info.plist"
@@ -75,7 +82,14 @@ jobs:
           resolved_sha="$(git rev-parse HEAD)"
           version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_plist")"
           test -n "$version"
-          tag="v${version}-statscompact.${GITHUB_RUN_ID}"
+          case "$BUILD_CHANNEL" in
+            c|cw) ;;
+            *) echo "Unsupported build channel: $BUILD_CHANNEL" >&2; exit 1 ;;
+          esac
+          tag="v${version}-${BUILD_CHANNEL}${GITHUB_RUN_NUMBER}"
+          if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then
+            tag="${tag}.${GITHUB_RUN_ATTEMPT}"
+          fi
 
           /usr/libexec/PlistBuddy -c "Delete :CompactReleaseTag" "$app_plist" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :CompactBuildSHA" "$app_plist" 2>/dev/null || true

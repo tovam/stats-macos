@@ -7,7 +7,7 @@ require 'shellwords'
 
 class ForkIntegrationTest < Minitest::Test
   ROOT = File.expand_path('../..', __dir__)
-  TAG = 'v3.0.18-statscompact.123456'
+  TAG = 'v3.0.22-c42'
   SHA = 'a' * 40
 
   def workflow(name)
@@ -20,6 +20,8 @@ class ForkIntegrationTest < Minitest::Test
     triggers = build['on'] || build[true] # Psych's YAML 1.1 treats "on" as a boolean.
     assert_equal './.github/workflows/fork-build.yaml', weekly['jobs']['build-and-release']['uses']
     assert_equal true, weekly['jobs']['build-and-release']['with']['publish_release']
+    assert_equal 'cw', weekly['jobs']['build-and-release']['with']['build_channel']
+    assert_equal 'c', triggers['workflow_call']['inputs']['build_channel']['default']
     %w[workflow_call workflow_dispatch].each do |event|
       assert_equal 'boolean', triggers[event]['inputs']['publish_release']['type']
     end
@@ -78,6 +80,7 @@ class ForkIntegrationTest < Minitest::Test
       values = {
         'CFBundleIdentifier' => 'com.tovam.StatsCompact',
         'CFBundleExecutable' => 'Stats Compact',
+        'CFBundleShortVersionString' => '3.0.22',
         'CompactReleaseRepository' => 'tovam/stats-macos',
         'SupportPromptsEnabled' => false,
         'CompactReleaseTag' => TAG,
@@ -97,8 +100,8 @@ class ForkIntegrationTest < Minitest::Test
     end
   end
 
-  def validate(app)
-    Open3.capture3('bash', 'Fork/verify-release.sh', app, TAG, SHA, chdir: ROOT)
+  def validate(app, tag = TAG, sha = SHA)
+    Open3.capture3('bash', 'Fork/verify-release.sh', app, tag, sha, chdir: ROOT)
   end
 
   def test_bundle_is_compatible_with_existing_updaters
@@ -108,12 +111,49 @@ class ForkIntegrationTest < Minitest::Test
     end
   end
 
+  def test_workflow_stamps_short_distinct_tags_for_each_counter_and_retry
+    stamp = workflow('fork-build.yaml')['jobs']['build']['steps'].find do |step|
+      step['id'] == 'release_metadata'
+    end
+    assert_equal "${{ inputs.build_channel || 'c' }}", stamp['env']['BUILD_CHANNEL']
+
+    [['c', '1', 'c42'], ['cw', '1', 'cw42'], ['c', '2', 'c42.2'], ['cw', '10', 'cw42.10']].each do |channel, attempt, suffix|
+      with_bundle do |app|
+        fixture = File.dirname(app)
+        stamped = File.join(fixture, 'build/Build/Products/Release/Stats Compact.app')
+        FileUtils.mkdir_p(File.dirname(stamped))
+        FileUtils.mv(app, stamped)
+        output_path = File.join(fixture, 'outputs')
+        environment = {
+          'BUILD_CHANNEL' => channel,
+          'GITHUB_RUN_NUMBER' => '42',
+          'GITHUB_RUN_ATTEMPT' => attempt,
+          'GITHUB_OUTPUT' => output_path
+        }
+        output, errors, status = Open3.capture3(environment, 'bash', '-c', stamp['run'], chdir: fixture)
+        assert status.success?, output + errors
+        metadata = File.readlines(output_path, chomp: true).map { |line| line.split('=', 2) }.to_h
+        assert_equal "v3.0.22-#{suffix}", metadata['tag']
+        output, errors, status = validate(stamped, metadata['tag'], metadata['sha'])
+        assert status.success?, output + errors
+      end
+    end
+  end
+
+  def test_legacy_release_tags_remain_valid
+    legacy_tag = 'v3.0.22-statscompact.39351575092'
+    with_bundle('CompactReleaseTag' => legacy_tag) do |app|
+      output, errors, status = validate(app, legacy_tag)
+      assert status.success?, output + errors
+    end
+  end
+
   def test_wrong_identity_repository_version_or_commit_cannot_be_published
     {
       'CFBundleIdentifier' => 'eu.exelban.Stats',
       'CFBundleExecutable' => 'Stats',
       'CompactReleaseRepository' => 'exelban/stats',
-      'CompactReleaseTag' => 'v3.0.18-statscompact.1',
+      'CompactReleaseTag' => 'v3.0.22-c41',
       'CompactBuildSHA' => 'b' * 40
     }.each do |key, value|
       with_bundle(key => value) do |app|

@@ -8,7 +8,7 @@ release_tag="$2"
 release_sha="$3"
 test -n "$release_app" && test -d "$release_app" && test ! -L "$release_app"
 test "${release_app##*/}" == 'Stats Compact.app'
-[[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-statscompact\.[0-9]+$ ]]
+[[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(cw?[1-9][0-9]*(\.[1-9][0-9]*)?|statscompact\.[0-9]+)$ ]]
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
 release_plist="$release_app/Contents/Info.plist"
 

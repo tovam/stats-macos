@@ -65,6 +65,7 @@ jobs:
     uses: ./.github/workflows/fork-build.yaml
     with:
       ref: ${{ needs.sync.outputs.sha }}
+      build_channel: cw
       publish_release: true
     permissions:
       contents: write

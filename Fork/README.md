@@ -27,11 +27,13 @@ Preserve all of these when changing builds:
 - Release asset: `Stats-Compact.app.zip`, with a GitHub SHA-256 digest.
 - Top-level bundle: `Stats Compact.app`; executable: `Stats Compact`.
 - Bundle identifier: `com.tovam.StatsCompact`.
-- Tag format: `v<upstream version>-statscompact.<GitHub run ID>`.
+- Tag format: `v<upstream version>-c<build number>`, for example `v3.0.22-c42`. Weekly sync builds use `cw` (`v3.0.22-cw12`) because GitHub numbers each caller workflow separately. Reruns append their attempt (`v3.0.22-c42.2`) to avoid reusing a published tag. The full GitHub run ID stays in release notes rather than the version suffix.
 - `CompactReleaseRepository`, `CompactReleaseTag`, `CompactBuildSHA` and `CompactBuildDate` in the app's Info.plist.
 - The release target is the full SHA actually checked out and built, including merges performed by the weekly workflow.
 - `Contents/Resources/Scripts/updater.sh` is the fork updater. Do not replace it with the upstream DMG updater.
 - Keep `sync-upstream.yaml` named as-is: installed apps query its scheduled runs for weekly health. A newer public release supersedes an earlier weekly failure.
+
+Already-installed updaters accept the short tags: they query the latest public release and match the exact tag and commit stored in the downloaded bundle, without parsing or numerically sorting the suffix. Legacy `-statscompact.<GitHub run ID>` tags remain valid for bundle verification.
 
 `Fork/verify-release.sh` enforces the bundle contract before packaging and publication, including disabled support prompts and byte-for-byte comparison with both fork scripts. `ruby Fork/tests/integration_test.rb` tests the publisher wiring, rejects mismatched synthetic bundles, and checks the fork uninstaller using an explicit dry run. The publisher also requires upstream's `make test-smc` to pass before building; the separate, path-filtered SMC workflow alone is not a release gate. Tests only create temporary fixtures inside this repository; they never inspect an installed app or user data.
 
