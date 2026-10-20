@@ -24,6 +24,7 @@ assert_value() {
 assert_value CFBundleIdentifier com.tovam.StatsCompact
 assert_value CFBundleExecutable 'Stats Compact'
 assert_value CompactReleaseRepository tovam/stats-macos
+assert_value SupportPromptsEnabled false
 assert_value CompactReleaseTag "$release_tag"
 assert_value CompactBuildSHA "$release_sha"
 test -x "$release_app/Contents/MacOS/Stats Compact"

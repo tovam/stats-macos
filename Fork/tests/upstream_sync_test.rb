@@ -2,6 +2,7 @@ require 'minitest/autorun'
 require 'open3'
 require 'tmpdir'
 require 'fileutils'
+require 'yaml'
 
 class UpstreamSyncTest < Minitest::Test
   ROOT = File.expand_path('../..', __dir__)
@@ -26,6 +27,13 @@ class UpstreamSyncTest < Minitest::Test
     git('rev-parse', 'HEAD')
   end
 
+  def build_workflow(name, runner: 'macos-latest', xcode: nil)
+    steps = []
+    steps << { 'name' => 'Select Xcode', 'run' => "sudo xcode-select -s #{xcode}" } if xcode
+    steps << { 'run' => 'xcodebuild -scheme Stats build CODE_SIGNING_ALLOWED=NO' }
+    { 'name' => name, 'jobs' => { 'build' => { 'runs-on' => runner, 'steps' => steps } } }.to_yaml
+  end
+
   def with_repo
     # Only generated source fixtures in this project; no real repo credentials,
     # user data, installed applications or network operations.
@@ -36,12 +44,12 @@ class UpstreamSyncTest < Minitest::Test
       git('config', 'user.email', 'sync@example.invalid')
       git('config', 'commit.gpgsign', 'false')
       git('config', 'core.hooksPath', '.git/no-hooks')
-      write('.github/workflows/build.yaml', "name: base\n")
+      write('.github/workflows/build.yaml', build_workflow('base'))
       write('app.swift', "let version = 1\n")
       commit('Base')
       git('branch', 'upstream')
-      write('.github/workflows/build.yaml', "name: fork publisher\n")
-      write('.github/workflows/fork-build.yaml', "name: fork\n")
+      write('.github/workflows/build.yaml', build_workflow('upstream build with fork guard'))
+      write('.github/workflows/fork-build.yaml', build_workflow('fork'))
       @fork = commit('Fork CI')
       yield
     end
@@ -66,7 +74,7 @@ class UpstreamSyncTest < Minitest::Test
     with_repo do
       upstream_changes do
         write('app.swift', "let version = 2\n")
-        write('.github/workflows/build.yaml', "name: changed upstream CI\n")
+        write('.github/workflows/build.yaml', build_workflow('changed upstream CI'))
         write('.github/workflows/release.yaml', "name: upstream release\n")
       end
       output, error, status = sync
@@ -85,6 +93,52 @@ class UpstreamSyncTest < Minitest::Test
       output, error, status = sync
       assert status.success?, output + error
       assert_workflows_preserved
+    end
+  end
+
+  def test_runner_and_xcode_changes_require_review_before_merging_source
+    [{ runner: 'macos-next' }, { xcode: '/Applications/Xcode_next.app/Contents/Developer' }].each do |change|
+      with_repo do
+        upstream_changes do
+          write('app.swift', "let version = 2\n")
+          write('.github/workflows/build.yaml', build_workflow('new upstream environment', **change))
+        end
+        output, error, status = sync
+        refute status.success?, output + error
+        assert_includes output, 'Build environment review required'
+        assert_equal @fork, git('rev-parse', 'HEAD')
+        assert_empty git('status', '--porcelain')
+        assert_equal "let version = 1\n", File.read(File.join(@repo, 'app.swift'))
+        assert_workflows_preserved
+      end
+    end
+  end
+
+  def test_reviewed_environment_change_allows_the_source_merge
+    with_repo do
+      upstream_changes do
+        write('app.swift', "let version = 2\n")
+        write('.github/workflows/build.yaml', build_workflow('new upstream environment', runner: 'macos-next'))
+      end
+      write('.github/workflows/fork-build.yaml', build_workflow('reviewed fork environment', runner: 'macos-next'))
+      @fork = commit('Review upstream build environment')
+      output, error, status = sync
+      assert status.success?, output + error
+      assert_equal "let version = 2\n", File.read(File.join(@repo, 'app.swift'))
+      assert_workflows_preserved
+      assert_equal [@fork, @upstream], git('show', '-s', '--format=%P', 'HEAD').split
+    end
+  end
+
+  def test_already_integrated_source_still_checks_the_build_environment
+    with_repo do
+      write('.github/workflows/fork-build.yaml', build_workflow('stale fork environment', runner: 'macos-old'))
+      @fork = commit('Use an older build environment')
+      output, error, status = sync
+      refute status.success?, output + error
+      assert_includes output, 'Build environment review required'
+      assert_equal @fork, git('rev-parse', 'HEAD')
+      assert_empty git('status', '--porcelain')
     end
   end
 

@@ -34,7 +34,7 @@ concurrency:
 jobs:
   build:
     if: github.repository == 'tovam/stats-macos'
-    runs-on: macos-15
+    runs-on: macos-latest
     permissions:
       contents: write
 

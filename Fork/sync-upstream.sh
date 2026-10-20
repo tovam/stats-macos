@@ -16,6 +16,8 @@ before="$(git rev-parse --verify HEAD)"
 upstream="$(git rev-parse --verify --end-of-options "$1^{commit}")"
 base="$(git merge-base "$before" "$upstream")"
 
+ruby "$(dirname "$0")/check-build-environment.rb" "$upstream"
+
 if git merge-base --is-ancestor "$upstream" "$before"; then
     echo 'Upstream is already integrated.'
     exit 0

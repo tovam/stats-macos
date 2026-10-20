@@ -45,6 +45,8 @@
 	<string>NSApplication</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>SupportPromptsEnabled</key>
+	<false/>
 	<key>SMPrivilegedExecutables</key>
 	<dict>
 		<key>com.tovam.StatsCompact.SMC.Helper</key>

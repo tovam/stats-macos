@@ -43,6 +43,14 @@ class ForkIntegrationTest < Minitest::Test
     assert_equal "github.repository == 'exelban/stats'", release['jobs']['release']['if']
   end
 
+  def test_fork_build_environment_matches_the_reviewed_upstream_workflows
+    build = workflow('build.yaml')['jobs']['build']
+    fork = workflow('fork-build.yaml')['jobs']['build']
+    release = workflow('release.yaml')['jobs']['release']
+    assert_equal build['runs-on'], fork['runs-on']
+    assert_equal build['runs-on'], release['runs-on']
+  end
+
   def test_weekly_sync_uses_the_tested_workflow_preservation_policy
     steps = workflow('sync-upstream.yaml')['jobs']['sync']['steps']
     test_step = steps.find { |step| step['name'] == 'Test upstream sync policy' }
@@ -71,10 +79,13 @@ class ForkIntegrationTest < Minitest::Test
         'CFBundleIdentifier' => 'com.tovam.StatsCompact',
         'CFBundleExecutable' => 'Stats Compact',
         'CompactReleaseRepository' => 'tovam/stats-macos',
+        'SupportPromptsEnabled' => false,
         'CompactReleaseTag' => TAG,
         'CompactBuildSHA' => SHA
       }.merge(overrides)
-      entries = values.map { |key, value| "<key>#{key}</key><string>#{value}</string>" }.join
+      entries = values.map do |key, value|
+        "<key>#{key}</key>" + (value == true || value == false ? "<#{value}/>" : "<string>#{value}</string>")
+      end.join
       File.write(File.join(app, 'Contents/Info.plist'), "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict>#{entries}</dict></plist>")
       FileUtils.mkdir_p(File.join(app, 'Contents/MacOS'))
       executable = File.join(app, 'Contents/MacOS/Stats Compact')
@@ -119,6 +130,14 @@ class ForkIntegrationTest < Minitest::Test
         _output, _errors, status = validate(app)
         refute status.success?, "Unexpectedly accepted wrong #{name}"
       end
+    end
+  end
+
+  def test_bundle_cannot_enable_automatic_support_prompts
+    with_bundle('SupportPromptsEnabled' => true) do |app|
+      output, errors, status = validate(app)
+      refute status.success?, output + errors
+      assert_includes output, 'Unexpected SupportPromptsEnabled'
     end
   end
 
